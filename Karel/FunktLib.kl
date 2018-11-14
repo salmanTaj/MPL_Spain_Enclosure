@@ -1,0 +1,1140 @@
+PROGRAM FunktLib
+	
+	%COMMENT = 'Vers. 1.1-rafa'
+	%NOPAUSESHFT
+	%NOPAUSE = ERROR + TPENABLE
+	%NOABORT = ERROR 
+	%NOLOCKGROUP
+
+TYPE
+	%INCLUDE Types
+	
+
+VAR
+	%INCLUDE Gvars
+	%INCLUDE MPL_vars
+	
+	STATUS  	:INTEGER 		-- The status of the operation of GET_REG
+	Bool 			: BOOLEAN		-- Recieves flag IF reg value is a REAL
+	Int				: INTEGER		-- Contains reg val if an Integer
+	Reall			: REAL			-- Contains reg val if a Real
+	text1 			:STRING[1]
+	fjntArr 		 :ARRAY[9] OF REAL  --JArr
+	Pos_Eval  :Pos_Chk	
+	Move_Pos	 :Pos_Chk
+	test: INTEGER
+	Point, Point1, Point2, Point3, PointUF2,PointUF1		 :XYZWPREXT
+	Jpoint2	 :JOINTPOS
+	errorval  :INTEGER
+	posdest :XYZWPREXT
+	real_temp1: INTEGER
+	real_temp2: REAL
+	off1x,off3x,off1y,off3y,offz: REAL
+	
+	Retract: INTEGER  -- temp
+	SearcSign : BOOLEAN --temp
+	StatMO		: INTEGER			-- Motion status
+
+	PointFound    	:BOOLEAN
+	mirror_val : REAL		
+
+--
+
+--ROUTINE Set_DOUT (OutNr   :INTEGER; Value : BOOLEAN):  FROM FunktLib
+--ROUTINE Get_DIN (OutNr   :INTEGER): BOOLEAN FROM FunktLib
+ROUTINE Get_IReg (Number : INTEGER) :INTEGER FROM FunktLib
+ROUTINE Get_RReg (Number : INTEGER) :REAL FROM FunktLib
+ROUTINE Set_IReg (Number : INTEGER; Value : INTEGER) FROM FunktLib
+ROUTINE Set_RReg (Number : INTEGER; Value : REAL) FROM FunktLib
+ROUTINE Hvis (Var1 : REAL; Compare : STRING; Var2 : REAL ; Stp_True : INTEGER; Stp_False : INTEGER) :INTEGER FROM Funktlib
+
+ROUTINE Def_Cart_MP (RegNr: INTEGER; X :REAL;Y:REAL;Z:REAL;w:REAL;p:REAL;r:REAL;Ex1:REAL)FROM FunktLib
+ROUTINE Def_Jnt_MP (RegNr: INTEGER; J1:REAL; J2:REAL; J3:REAL; J4:REAL; J5:REAL; J6:REAL; J7:REAL; 
+J8:REAL; J9:REAL)FROM FunktLib
+ROUTINE Def_SP (OutNr   : INTEGER; X :REAL;Y:REAL;Z:REAL) FROM FunktLib	-- sensepunkt der lægges ud i registre
+ROUTINE Def_PR (OutNr   : INTEGER; ReqD :INTEGER;ReqL:REAL;G1: INTEGER; G2:INTEGER; G3:INTEGER) FROM FunktLib	-- sensepunkt der lægges ud i registre
+ROUTINE Act_Pos(MPNr   : INTEGER;ROB: INTEGER) FROM FunktLib	-- put aktuelle position i MP [nummer]
+--Slettet ROUTINE Reg_Feat_Nr(ID_Nr   : INTEGER) FROM FunktLib
+ROUTINE Dir_func FROM  Funktlib
+ROUTINE Pos_Sel FROM  Funktlib
+ROUTINE CloseDoor FROM  Funktlib -- closes laserdoor and check laser dist
+--ROUTINE ProThick : REAL FROM GeoLib -- Min. plate thickness
+
+ROUTINE Searching(DirNum:INTEGER; SearchLen:INTEGER; Retract:INTEGER;SearcSign: BOOLEAN;Err_Cond:INTEGER):REAL FROM FunktLib
+ROUTINE Ch_Conf_Mov(PosExt1:XYZWPREXT;PosExt2:XYZWPREXT;ForceCh:INTEGER;SearchVal:BOOLEAN):XYZWPREXT FROM FunktLib
+ROUTINE Mot_Sens(PosDest:XYZWPREXT;SearchType : STRING; Flange: BOOLEAN ):Pos_Chk FROM FunktLib
+ROUTINE Motion(PosDest:XYZWPREXT;ForceCh:INTEGER) FROM FunktLib
+ROUTINE ConvertPoint (PointUF2:XYZWPREXT): XYZWPREXT FROM FunktLib
+ROUTINE CheckLaw :INTEGER FROM TaskMan
+
+ROUTINE Loop_AL FROM AnLa_ny
+ROUTINE Start_AL FROM AnLa_ny
+
+
+
+--ROUTINE ReadLaser(S_Type:INTEGER; S_Val:REAL) FROM analaser
+--ROUTINE  Feat_Nr(ID_Nr   :INTEGER) FROM FunktLib
+--ROUTINE Set_DOUT (OutNr :INTEGER) FROM FunktLib
+
+--
+
+--***********************************************************************************************
+-- ROUTINE -->> Returning INT value of selected register number
+-- ***********************************************************************************************
+-- 2015-02-13: tested and works.
+ROUTINE Get_IReg  -- (Number : INTEGER) :INTEGER FROM FunktLib
+BEGIN
+	GET_REG(Number,Bool,Int,Reall,STATUS)
+	IF (STATUS = 0) THEN
+		IF (Bool = TRUE) THEN
+			int = ROUND(Reall)		
+		ENDIF	
+		RETURN(Int)
+	ELSE
+		ErrorNo = 930
+		ErrorReq = TRUE
+		PAUSE        
+	ENDIF  
+END Get_IReg
+
+--***********************************************************************************************
+-- ROUTINE -->> Returning REAL value of selected register number
+-- ***********************************************************************************************
+-- 2015-02-13: tested and works.
+ROUTINE Get_RReg -- (Number : INTEGER) :REAL FROM FunktLib
+BEGIN
+	GET_REG(Number,Bool,Int,Reall,STATUS)
+	IF (STATUS = 0) THEN
+		IF (Bool = TRUE) THEN
+			RETURN(Reall)	
+		ELSE		
+			RETURN(Int)
+		ENDIF	
+		
+	ELSE
+		ErrorNo = 931
+		ErrorReq = TRUE        
+		PAUSE
+	ENDIF  
+END Get_RReg
+
+-- ***********************************************************************************************
+-- ROUTINE -->> Setting value of selected register
+-- ***********************************************************************************************
+-- 2015-02-13: tested and works.
+ROUTINE Set_IReg -- (Number : INTEGER) :INTEGER FROM FunktLib
+BEGIN
+	SET_INT_REG(Number, (Value), STATUS)
+	--DELAY 10 -- duer ikke ved dual arm
+	IF (STATUS <> 0) THEN
+		ErrorNo = 932
+		ErrorReq = TRUE
+		pause        
+	ENDIF  
+END Set_IReg
+
+-- ***********************************************************************************************
+-- ROUTINE -->> Setting value of selected register
+-- ***********************************************************************************************
+-- 2015-02-13: tested and works.
+ROUTINE Set_RReg -- (Number : INTEGER) :REAL FROM FunktLib
+BEGIN
+	SET_REAL_REG(Number, Value, STATUS)
+	--DELAY 10
+	IF (STATUS <> 0) THEN
+		ErrorNo = 933
+		ErrorReq = TRUE     
+		PAUSE   
+	ENDIF  
+END Set_RReg
+
+
+--***********************************************************************************************
+-- ROUTINE -->> Pos_select depending on Robot
+-- ***********************************************************************************************
+-- 2015-02-13: tested and works.
+ROUTINE Pos_Sel
+BEGIN
+IF robot = 1 THEN
+	Sens_Pos.Pos_Select1 = JPos_Test
+	Sens_pos.Pos_select=Sens_Pos.Pos_Select1
+else
+	Sens_Pos.Pos_Select3 = JPos_Test
+	Sens_pos.Pos_select=Sens_Pos.Pos_Select3
+ENDIF
+	
+END Pos_Sel
+-- ***********************************************************************************************
+-- ROUTINE -->> HVIS - var1 compared var2 -> step1 eller step2
+-- (Var1 : REAL; Var2 : REAL ; Compare : STRING[1]; Stp_True : INTEGER; Stp_False : INTEGER)
+-- ***********************************************************************************************
+-- 2015-02-13: tested and works, But will not be used for first step
+ROUTINE Hvis --(Var1 : REAL; Compare : str1; Var2 : REAL ; Stp_True : INTEGER; Stp_False : INTEGER) :INTEGER FROM Funktlib
+VAR
+	Sign :INTEGER
+
+BEGIN
+	IF compare = '<>' THEN
+		IF Var1 <> Var2 THEN
+			RETURN (Stp_True)
+		ELSE	
+			RETURN (Stp_False)
+		ENDIF	
+	--ENDIF	
+		--Sign = 55
+	ELSE	
+		Sign = ORD(compare,1)
+	ENDIF
+	
+	SELECT Sign OF
+		CASE (61):   -- =
+			IF Var1 = Var2 THEN
+				RETURN (Stp_True)
+			ELSE	
+				RETURN (Stp_False)
+			ENDIF	
+		CASE (62):   -- >
+			IF Var1 > Var2 THEN
+				RETURN (Stp_True)
+			ELSE	
+				RETURN (Stp_False)
+			ENDIF	
+		CASE (60):   -- <
+			IF Var1 < Var2 THEN
+				RETURN (Stp_True)
+			ELSE	
+				RETURN (Stp_False)
+			ENDIF	
+	ELSE:
+		RETURN (0)
+
+	ENDSELECT		
+
+END Hvis
+
+-- ***********************************************************************************************
+-- ROUTINE -->> definerer et Cartetisk Motion punkt
+-- ***********************************************************************************************
+--2015-03-11: virker. slettet feedback og melder altid fejl
+ROUTINE Def_Cart_MP  --(RegNr   : INTEGER; X :REAL;Y:REAL;Z:REAL;w:REAL;p:REAL;r:REAL;Cnfg:CONFIG;Ex1:REAL)
+
+BEGIN
+
+	
+	Bool = FALSE
+	Point = CURPOS(0,0,robot)
+	Point1 = CURPOS(0,0,robot)
+	
+	Point.X = X
+	Point.Y = Y
+	Point.Z = Z
+	Point.w = w
+	Point.p = p
+	Point.r = r
+	Cnfg = Point.Config_Data 
+	
+	IF ex1<>99999 THEN -- if external position is set as 99999, robot takes the current pos for ext axis
+		Point.Ext1 = Ex1
+	ENDIF
+	
+	MP[RegNr] = Point	
+	
+END Def_Cart_MP
+
+
+-- ***********************************************************************************************
+-- ROUTINE -->> definerer et Joint Motion punkt
+-- ***********************************************************************************************
+--2015-03-11: virker. slettet feedback og melder altid fejl
+ROUTINE Def_Jnt_MP  --	(RegNr   : INTEGER;  jntArr :JArr)
+BEGIN
+	
+	fjntArr[1]= j1
+	fjntArr[2]= j2
+	fjntArr[3]= j3
+	fjntArr[4]= j4
+	fjntArr[5]= j5
+	fjntArr[6]= j6
+	fjntArr[7]= j7
+	fjntArr[8]= j8
+	fjntArr[9]= j9
+		
+	IF J7=99999 THEN -- if external position is set as 99999, robot takes the current pos for ext axis
+		Point = CURPOS(0,0)
+		fjntArr[7]=point.ext1
+	ENDIF
+	
+		--CNV_REL_JPOS(JntArr1, JPos_Test, 
+	CNV_REL_JPOS( fjntArr, JPosTest, STATUS)
+	CalcPos = JPosTest
+	CHECK_EPOS (CalcPos, $GROUP[1].$UFRAME, $GROUP[1].$UTOOL, STATUS)  -- checking validity of position
+	IF STATUS = 0 THEN
+		MP[RegNr] = JPosTest
+	ELSE
+		ErrorNo = 501         -- Critical point error
+		ErrorReq = TRUE
+		PAUSE
+	ENDIF	
+	
+END Def_Jnt_MP
+
+-- ***********************************************************************************************
+-- ROUTINE -->> lægger den aktuelle position ud i et Motion Point
+-- ***********************************************************************************************
+--2015-03-11: virker
+ROUTINE Act_Pos --(MPNr   : INTEGER; Rob : integer) FROM FunktLib	-- put aktuelle position i MP [nummer]
+BEGIN
+	MP[MPNr] = CURPOS(0,0,rob)
+END Act_Pos
+
+
+-- ***********************************************************************************************
+-- ROUTINE -->> Sets Profile end, side, X,Y values depending on profile direction
+-- ***********************************************************************************************
+ROUTINE Dir_func -- FROM Funklib
+BEGIN
+
+-----------------------------------------------------------
+--Profile points
+-----------------------------------------------------------
+-- Copy the 5 directions
+XY_tmp=XY_dir
+X_tmp=X_dir
+Y_tmp=Y_dir
+RD_tmp=RD
+SE_tmp=SE
+
+-- handling 5 directions for web sensing
+IF ((web_type= 2) AND ((Actstep=(35+SO)) OR (Actstep=(36+SO))))  THEN 
+	IF XY_dir=1 THEN -- if y-profile -> X web
+		XY_tmp=2 -- fixed. web is in Y
+		SE_tmp=-1 -- fixed
+		
+		IF swap_robot<>0 THEN -- if robot is swapped
+			RD_tmp=RD*Get_IReg(179)
+			Y_dir=-1
+		else
+			RD_tmp=RD
+			Y_dir=1
+		ENDIF
+	ENDIF
+	
+	IF XY_dir=2 THEN -- if y-profile -> X web
+		XY_tmp=1 -- fixed web is in X-dir
+		X_tmp=1*RD --opposite for the 2 robots
+		SE_tmp=-1 -- fixed dir
+		RD_tmp=SE*Y_dir-- robot dir
+	ENDIF
+
+ENDIF
+
+
+-- Swapping direction for E_offs, S_offs and S_dir
+IF xy_tmp=1 THEN -- X direction
+	E_offs=E_offs * X_tmp*SE_tmp -- robot does not have influense
+	S_offs=S_offs*RD_tmp*(-1)
+	
+	-- Sensing direction
+	IF ((S_dir=-1) OR (S_dir=1)) THEN -- Sensing ind profile length
+		S_dir = S_dir*X_tmp*SE_tmp
+		A_dir=S_dir -- analog sensing direction
+	else 
+		S_dir = S_dir*RD_tmp*(-1)
+		A_dir=ROUND(S_dir/2) -- analog sensing direction
+	ENDIF
+	
+
+
+else  --Y direction
+
+	E_offs=E_offs*Y_tmp*SE_tmp
+	S_offs=S_offs*RD_tmp
+	
+	-- Sensing direction
+	IF ((S_dir=-1) OR (S_dir=1)) THEN -- Sensing ind profile length
+		S_dir = S_dir * 2 * SE_tmp * Y_tmp	
+		--analog sensing direction
+		A_dir=ROUND(S_dir/2) -- analog sensing direction
+		
+	else -- if -2 or 2
+		S_dir = ROUND(S_dir/2)*RD_tmp
+		--analog sensing direction
+		A_dir=S_dir  -- analog sensing direction
+	ENDIF
+	
+
+ENDIF
+
+-- Changing angles depending on Robot etc. 
+IF xy_tmp = 1 THEN  -- profile in X-dir
+		r_angle=(-90+(r_angle*SE_tmp*X_tmp*(-1)))*RD_tmp
+		
+else 
+		-- profile in Y -dir
+		r_angle=0+(r_angle*SE_tmp*Y_tmp*(-1))
+		IF RD_tmp=(-1) THEN
+			r_angle=(180-(ABS(r_angle)))*SE_tmp*Y_tmp*(-1)
+		ENDIF		
+ENDIF 
+
+-- factor direction- for offset of sensing point
+-- + is opposite dir than sensing!
+F_dir=S_dir*(-1)
+	IF ((F_dir=-2) OR (F_dir=2)) THEN
+		F_dir=ROUND(F_dir/2)
+	ENDIF
+
+-----------------------------------------------------------
+-- Sensing directions
+IF xy_tmp = 1 THEN -- profile X direction
+	ProX=ProE
+	ProY=ProS
+	X_offs=E_offs
+	Y_offs=S_offs
+	
+else
+	ProX=ProS
+	ProY=ProE
+	X_offs=S_offs
+	Y_offs=E_offs
+	
+-- get correct tool dir
+	IF tool_dir = 1 THEN
+		Tool_dir = 2 
+	else
+		tool_dir = 1
+	ENDIF
+	
+ENDIF
+
+-----------------------------------------------------------
+
+END Dir_func
+
+-- ***********************************************************************************************
+-- ROUTINE -->> definerer et PR
+-- ***********************************************************************************************
+ -- Sets PR for robot motion. 
+ -- using current position and distance to calculate new point
+ ROUTINE Def_PR  -- Def_PR OutNr   : INTEGER; RegD:INTEGER; ReqL:REAL;G1: BOOLEAN; G2:BOOLEAN; G3:BOOLEAN
+
+CONST	
+	RegOffs = 60
+
+BEGIN
+
+-- always use UF 1
+$GROUP[1].$UFRAME = $MNUFRAME[1, 1] 
+$GROUP[2].$UFRAME = $MNUFRAME[2, 1] 
+$GROUP[3].$UFRAME = $MNUFRAME[3, 1] 
+$GROUP[1].$UTOOL = $MNUTOOL[1, 1]
+$GROUP[2].$UTOOL = $MNUTOOL[2, 1]
+$GROUP[3].$UTOOL = $MNUTOOL[3, 1]
+
+-- a
+--dx=ReqD
+--dy=ReqL
+--dt=G1
+--PAUSE
+		 
+-- Calculation of delta X,Y 
+-- FOR X - welding direction
+IF XY_dir = 1 THEN
+	IF ReqD=1 THEN -- X Request
+		Dx=ReqL
+		Dy=ReqL*TAN(PangPos)
+		DT=dx/COS(PangPos)
+		dx=dx*X_dir
+		dy=dy*Y_dir
+	ENDIF
+	
+	IF ReqD=2 THEN -- Y Request
+		Dy=ReqL
+		Dx=ReqL/TAN(PangPos)
+		
+		IF PangPos <> 0 THEN
+			DT=dy/SIN(PangPos)
+		else
+			DT=5
+		ENDIF
+		dx=dx*X_dir
+		dy=dy*Y_dir
+	ENDIF
+	
+	IF ReqD=3 THEN -- Length request
+		Dy=SIN(PangPos)*ReqL	
+		Dx=COS(PangPos)*ReqL
+		Dt=ReqL
+		dx=dx*X_dir
+		dy=dy*Y_dir
+	ENDIF
+ENDIF
+
+-- for Y - welding direction
+IF XY_dir = 2 THEN
+	IF ReqD=1 THEN -- X Request
+		Dx=ReqL
+		Dy=ReqL/TAN(PangPos)
+		DT=dy/COS(PangPos)
+		dx=dx*X_dir
+		dy=dy*Y_dir
+	ENDIF
+	
+	IF ReqD=2 THEN -- Y Request
+		Dy=ReqL
+		Dx=ReqL*TAN(PangPos)
+		
+		IF PangPos <> 0 THEN
+			DT=dx/SIN(PangPos)
+		else
+			DT=5
+		ENDIF
+		dx=dx*X_dir
+		dy=dy*Y_dir
+	ENDIF
+	
+	IF ReqD=3 THEN -- Length request
+		Dx=SIN(PangPos)*ReqL	
+		Dy=COS(PangPos)*ReqL
+		Dt=ReqL
+		dx=dx*X_dir
+		dy=dy*Y_dir
+	ENDIF
+ENDIF
+
+-- gets position of all qroups
+Point1 = CURPOS(0,0,1)
+Jpoint2 = CURJPOS(1,0,2)
+Point3 = CURPOS(0,0,3)
+
+ -- offsetting for simulating
+off1x=0
+off3x=0
+off1y=0
+off3y=0
+offz=0
+ 
+ IF DOUT[O_WeldEnb]=TRUE THEN -- reset if arc is on
+ 	Set_Ireg(494,0)
+ ENDIF
+ IF Get_IReg(494)=1 THEN 
+ 	--R3 is welding + side of x profile
+ 	IF xy_dir=1 THEN 
+	 	off1y=-15
+	 	off3y=15
+	 	offz=15
+ 	else
+ 		off1x=15
+	 	off3x=-15
+	 	offz=15
+ 	ENDIF
+ ENDIF
+		 
+
+IF G1=1 THEN	
+	--Sets positon of  group 1
+	IF G2=0 THEN -- only if G2 = 0
+		Point1.X = Point1.x+Dx+off1x
+	ENDIF
+	Point1.Y = Point1.y+Dy+off1y
+	Point1.Ext1 = Point1.Ext1+Dy 
+	
+ENDIF
+
+IF G2=1 THEN	
+	--Sets positon of  group2
+	Point2 = CURPOS(0,0,2)
+	Jpoint2 = CURJPOS(1,0,2)
+	CNV_JPOS_REL( jpoint2, fjntArr, STATUS)
+	
+	fjntArr[1]=fjntArr[1]/point2.x*(Point2.x+Dx)
+
+	CNV_REL_JPOS(fjntArr,Jpoint2, STATUS)
+	SET_JPOS_REG(1,Jpoint2, STATUS,2)
+
+	--Sets positon of  group 1+3
+	Point1.Y = Point1.y+Dy
+	Point1.Ext1 = Point1.Ext1+Dy 
+	
+	Point3.Y = Point3.y+Dy
+	Point3.Ext1 = Point3.Ext1+Dy
+	
+ENDIF
+
+IF G3=1 THEN	
+	--Sets positon of  group 1
+		IF G2=0 THEN -- only if G2 = 0
+			Point3.X = Point3.x+Dx+off3x
+		ENDIF
+	Point3.Y = Point3.y+Dy+off3y
+	Point3.Ext1 = Point3.Ext1+Dy 
+	
+ENDIF
+	
+	-- Calculate points if robots are jumping at start
+	-- If robot 1 is up jumping
+	IF KL_step=51 THEN 
+		IF Get_IReg(470)=1 THEN 
+			Point1=Point3
+			IF XY_dir = 1 THEN 
+				Point1.X=Point1.X+robot_dis*X_dir
+			else
+				Point1.Y=Point1.Y+robot_dis*Y_dir
+			ENDIF
+		ENDIF
+		
+			-- If robot 3 is up jumping
+		IF Get_IReg(470)=3 THEN 
+				Point3=Point1
+			IF XY_dir = 1 THEN 
+				Point3.X=Point3.X-robot_dis*X_dir
+			else
+				Point3.Y=Point3.Y-robot_dis*Y_dir
+			ENDIF
+		ENDIF
+	ENDIF
+	
+--Z offset for simulation
+point1.z=point1.z+offz
+point3.z=point3.z+offz
+
+Set_RReg(94,DT) -- motion distance
+SET_EPOS_REG(outnr,Point1, STATUS,1)
+SET_JPOS_REG(outnr,Jpoint2, STATUS,2)
+SET_EPOS_REG(outnr,Point3, STATUS,3)
+	
+END Def_PR
+
+-- ***********************************************************************************************
+-- ROUTINE -->> definerer et sense punkt
+-- ***********************************************************************************************
+ ----2015-03-11: virker. slettet feedback og melder altid fejl		
+ ROUTINE Def_SP  -- (RegNr   : INTEGER; X :REAL;Y:REAL;Z:REAL)
+
+CONST	
+	RegOffs = 60
+
+BEGIN
+	
+	Point = CURPOS(0,0,robot)
+	--RL_Side =  Get_IReg (110)
+	Point.X = X
+	Point.Y = Y
+	Point.Z = Z
+	-- Step values swap
+	
+	
+	Point.w = 0
+	Point.p = 0
+	Point.r = 0
+	Point.config_data.cfg_flip = TRUE  
+	
+	
+	Bool = TRUE -- error status
+		
+	SET_EPOS_REG(RegOffs + OutNr+(10*SE),Point, STATUS,robot)
+	IF STATUS <> 0 THEN
+		Bool = FALSE
+	ENDIF
+	
+	--stores position for Gantry too
+	Jpoint2 = CURJPOS(1,0,2)
+	SET_JPOS_REG(RegOffs + OutNr+(10*SE),Jpoint2, STATUS,2)
+		
+	IF STATUS <> 0 THEN
+		Bool = FALSE
+	ENDIF
+	
+	IF Bool = FALSE THEN
+		ErrorNo = 501         -- Critical point error
+		ErrorReq = TRUE
+		PAUSE
+	ENDIF
+		
+END Def_SP
+
+--***********************************************************************************************
+-- ROUTINE -->> Sense funktion. Digital, søger i en retning
+--***********************************************************************************************   
+ROUTINE Searching  --(DirNum:INTEGER; SearchLen:INTEGER; Retract:INTEGER; SearcSign: BOOLEAN;Err_Cond:INTEGER)  
+	--  retning          søgeafstand      returbevægelse      signalflanke
+VAR
+Random  :REAL
+--SearchTyp : str1
+
+CONST
+AdVal = 0   --(3.8 ved 100mm/s) forsinkelsen i mm fra indgangen går høj til positionen er registreret
+
+BEGIN
+	-- setting tools
+	$GROUP[1].$UTOOL = $MNUTOOL[1, 3]
+	$GROUP[3].$UTOOL = $MNUTOOL[3, 3]
+	
+	$GROUP[Robot].$UFRAME = $MNUFRAME[robot, 2] 
+	Set_IReg(96,2) -- setting userframe for TP program	
+	ToolP = 0
+	Sens_Diff = Retract
+	-- Initialize variables --------------------------------------------
+	Tik = $FAST_CLOCK
+	
+		IF (DirNum*DirNum) = 16 THEN -- if sensing in TOOL Direction
+			$GROUP[robot].$UFRAME = $MNUFRAME[robot, 9]
+			Act_pos(1,robot)
+			$MNUFRAME[robot,6]=mp[1]
+			$GROUP[robot].$UFRAME = $MNUFRAME[robot, 6] 
+			Set_IReg(96,6) -- setting userframe for TP program	
+			ToolP=9999
+			
+		ENDIF	
+	
+	-- sikrer at Dir og Retur kun har værdier i de retninger der skal søges og returneres
+	Dir.X = 0
+	Dir.Y = 0   
+	Dir.Z = 0
+	Retur = Dir
+	
+	ActPkt = CURPOS(0,0,robot)	
+	
+	Src_Begin = ActPkt    -- returpunkt ved fejlslaget søgning
+	Search_Sig = SearcSign 	-- om vi søger efter stigende eller faldende flanke (indgang On/Off)
+	---------------------------------------------------------------------
+	--DELAY 100
+	-- If the touch sensor detects anything before mooving
+	-- FORSLAG: routine kaldet kan evt. indeholde en mulighed for at søge i modsatte retning hvis signalet er triggered
+	IF ((DIN[I_SLaser]) = SearcSign) THEN
+		DELAY 1000 -- was 500
+			IF ((DIN[I_SLaser]) = SearcSign) THEN
+				ErrorNo = 510         -- Critical sensing error
+				ErrorReq = TRUE
+				PAUSE
+			ENDIF
+	ENDIF
+	---------------------------------------------------------------------
+    
+	--  calculating the destination point
+	IF (DirNum*DirNum) = 1 THEN   -- retning = +/- X (kvadratet er altid positivt)
+		Dir.X = SearchLen * DirNum
+		Retur.X = Retract * DirNum/(-1)
+	ENDIF  
+	IF (DirNum*DirNum) = 4 THEN   -- retning = +/- Y  (kvadratet er altid positivt)
+		Dir.Y = SearchLen * DirNum/2
+		Retur.Y = Retract * DirNum/(-2)
+		SensAccel = 60
+		$GROUP[1].$ACCEL_OVRD = SensAccel
+	ENDIF  
+	IF (DirNum*DirNum) = 9 THEN   -- retning = +/- Z  (kvadratet er altid positivt)
+		Dir.Z = SearchLen * DirNum/3
+		Retur.Z = Retract * DirNum/(-3)
+	ENDIF  
+	IF (DirNum*DirNum) = 16 THEN   -- retning = +/-  Tool  (kvadratet er altid positivt)
+		Dir.Z = SearchLen * DirNum/4
+		Retur.Z = Retract * DirNum/(-4)
+	ENDIF  
+	
+	Src_Target = ActPkt
+	Src_Return = ActPkt
+	Src_Target.X = ActPkt.X + Dir.X
+	Src_Target.Y = ActPkt.Y + Dir.Y
+	Src_Target.Z = ActPkt.Z + Dir.Z
+
+	Axis6RotID = Src_Target.Config_Data.cfg_turn_no3      -- 6. akses rotationsbyte (-1;0;1)
+	
+  	--------------------------------------------------------------------------------------
+	-- *******  SEARCHING ********
+
+	PointFound = FALSE    -- If sensing point is found, PointFound turn 'True'
+	Search_Sig = SearcSign   -- skal der søges mod stigende eller faldende flanke
+	text1 =  'D'
+	Pos_Eval =  Mot_Sens(Src_Target,text1, Search_Sig)		
+	
+	
+	-- *******  END SEARCHING 
+ErrorVal=0 --- what the fuck
+	--IF PointFound = TRUE THEN    -- Err-Cond = 1 => Err hvis pointfound false
+		--IF Err_Cond = -1 THEN       -- Err-Cond = -1 => Err hvis pointfound true
+			--IF (ErrorVal <> 0) THEN
+				--ErrorNo = ErrorVal
+			--ELSE 	
+				--ErrorNo = 510            -- Err-Cond = 0 => begge er valid 
+			--ENDIF  
+		--ENDIF
+	--ELSE
+		--IF Err_Cond = 1 THEN
+			--IF (ErrorVal <> 0) THEN
+				--ErrorNo = ErrorVal
+			--ELSE 	
+				--ErrorNo = 510            -- Err-Cond = 0 => begge er valid 
+			--ENDIF  
+		--ENDIF
+	--ENDIF
+	
+	--2017-07-10 RAFA new error handling
+	
+	IF ((Err_cond = 1) AND (Pointfound=FALSE)) THEN 
+		ErrorNo = 510 
+		errorreq=TRUE
+	ENDIF
+    
+    
+	IF PointFound = TRUE THEN    --- retracting
+		IF robot = 1 THEN
+			touchpoint=Pos_Eval.Pos_Select1
+		else 
+				touchpoint=Pos_Eval.Pos_Select3
+		ENDIF
+		
+		IF (DirNum*DirNum) = 1 THEN   -- retning = +/- X
+			SensVal = (TouchPoint.X)+(AdVal*(DirNum/(-1)))   -- AdVal er positionsmålingens unøjagtighed
+			Src_Return.X = SensVal + Retur.X
+		ENDIF  
+		IF (DirNum*DirNum) = 4 THEN   -- retning = +/- Y
+			SensVal = (TouchPoint.Y)+(AdVal*(DirNum/(-2)))
+			Src_Return.Y = SensVal + Retur.Y
+		ENDIF  
+		IF (DirNum*DirNum) = 9 THEN   -- retning = +/- Z
+			SensVal = (TouchPoint.Z)+(AdVal*(DirNum/(-3)))
+			Src_Return.Z = SensVal + Retur.Z
+		ENDIF  
+		IF (DirNum*DirNum) = 16 THEN   -- retning = +/- Tool
+			$GROUP[robot].$UFRAME = $MNUFRAME[robot, 6] 
+			Set_IReg(96,6) -- setting userframe for TP program	
+			SensVal = (ToolZ)+(AdVal*(DirNum/(-4)))-- for retraction
+			Src_Return.Z = SensVal + Retur.Z
+			SensVal = (ToolP)+(AdVal*(DirNum/(-4))) -- for sensvalue		
+		ENDIF  
+		
+		-- Retract with return values
+		set_IReg(85,movespeed)		
+		IF Retract <> 0 THEN
+			--DELAY 50
+			SET_EPOS_REG(10,Src_Return,STATUS,robot)
+			
+			IF Robot=1 THEN -- Robot 1
+ 				--RUN_TASK('sens1',1,FALSE,TRUE,1,statmpl)
+ 				wait for DOUT[101]=false
+ 				CALL_PROG('sens1',statmpl)
+			ENDIF
+ 					
+			IF Robot=3 THEN -- Robot 3
+				--RUN_TASK('sens3',1,FALSE,TRUE,4,statmpl)
+				wait for DOUT[103]=false
+				CALL_PROG('sens3',statmpl)
+			ENDIF	
+			
+			
+			--Motion(Src_Return,0)
+		ENDIF  
+		$GROUP[robot].$UFRAME = $MNUFRAME[robot, 2] 
+		Set_IReg(96,2) -- setting userframe for TP program	
+		
+		real_temp2=0
+		IF (CheckLaw = 329) THEN
+			RETURN (sensval)
+		ELSE
+			Random = (Tik/1000000) - (ROUND(Tik/1000000))
+			real_temp2=random
+			SensVal = SensVal + (random * 20)
+
+			RETURN (sensval)
+		ENDIF  
+
+		
+		
+	ELSE
+		
+		-- Return to StartPoint 
+		SET_EPOS_REG(10,Src_Begin,STATUS,robot)
+		set_IReg(85,movespeed)
+		DELAY 20
+					
+			IF Robot=1 THEN -- Robot 1
+				wait for DOUT[101]=FALSE
+ 				CALL_PROG('sens1',statmpl)
+ 			ENDIF
+ 					
+			IF Robot=3 THEN -- Robot 3
+				wait for DOUT[103]=FALSE
+				CALL_PROG('sens3',statmpl)
+			ENDIF	
+			
+			-- Setting userframe back
+			$GROUP[robot].$UFRAME = $MNUFRAME[robot, 2] 
+			Set_IReg(96,2) -- setting userframe for TP program	
+			
+		RETURN(9999)   
+	ENDIF      
+
+
+-- resetting Frame
+$GROUP[robot].$UFRAME = $MNUFRAME[robot, 2] 
+	
+END Searching
+
+
+--***********************************************************************************************
+-- ROUTINE -->> Sensning under motion (analog)
+--***********************************************************************************************
+ROUTINE Mot_Sens --Mot_Sens(PosDest:XYZWPREXT;SearchType : STRING; Flange: BOOLEAN ):Pos_Chk FROM FunktLib  
+ --  startpos           slutpos          tvungen config     søge ?
+
+	
+BEGIN
+		
+	$GROUP[1].$UTOOL = $MNUTOOL[1, 3]
+	$GROUP[3].$UTOOL = $MNUTOOL[3, 3]
+		
+	SensTarget = PosDest
+	$MCR_GRP[1].$QCK_STP_ENB = TRUE
+	extjnt[1]=0--EXT_Akse
+	extjnt[2]=0
+	extjnt[3]=0
+	PointFound = FALSE
+			
+DOUT[O_SensEnd]=OFF
+DOUT[O_SensStop]=OFF	
+ SET_EPOS_REG(10,Senstarget,STATUS,robot)
+ set_IReg(85,sensspeed)
+ DELAY 20
+ 		
+ 		IF Robot=1 THEN -- Robot 1
+ 			wait for DOUT[101]=FALSE
+ 			RUN_TASK('sens1',1,FALSE,TPflag,1,statmpl)
+ 		ENDIF
+ 					
+		IF Robot=3 THEN -- Robot 3
+			wait for DOUT[103]=FALSE
+			RUN_TASK('sens3',1,FALSE,TPflag,4,statmpl)
+		ENDIF	
+	
+
+		--****** digital sensning *********     
+		IF SearchType = 'D' THEN
+			Search_Sig = flange	
+			Mirror_val = 1
+		 		-- if point found or robot at end of search
+		 		WHILE  ((DOUT[O_SensStop]=FALSE) AND (DOUT[O_SensEnd]=FALSE)) DO
+		 			DELAY 2
+		 				 	
+		 			Mirror_val = 2
+					--IF DIN[I_SLaser] = Search_Sig THEN 
+					--mirror_val = 0
+					IF ((DIN[I_SLaser] = Search_Sig) AND ((AIN[IA_Slaser] >10000) OR  ((AIN[IA_Slaser] < 4200) AND (low_Mirror=1)))) THEN
+					--IF ((DIN[I_SLaser] = Search_Sig) AND (AIN[IA_Slaser] >10000)) THEN
+						Mirror_val = AIN[IA_Slaser] 
+						IF mirror_val < 4200 THEN 
+							PAUSE
+						ENDIF
+						
+								
+						PointFound = TRUE
+						DOUT[O_SensStop]=TRUE
+							
+						SensArr[1] = $SCR_GRP[Robot].$MCH_ANG[1]
+						SensArr[2] = $SCR_GRP[Robot].$MCH_ANG[2]
+						SensArr[3] = $SCR_GRP[Robot].$MCH_ANG[3]
+						SensArr[4] = $SCR_GRP[Robot].$MCH_ANG[4]
+						SensArr[5] = $SCR_GRP[Robot].$MCH_ANG[5]
+						SensArr[6] = $SCR_GRP[Robot].$MCH_ANG[6]
+						SensArr[7] = $SCR_GRP[Robot].$MCH_ANG[7]
+						SensArr[8] = extjnt[2]
+						SensArr[9] = extjnt[3]
+						
+					ENDIF 
+					
+		 		ENDWHILE	 		
+		 		
+ 			ENDIF
+     
+     --****** Analog sensning *********     
+		IF SearchType = 'A' THEN
+			Ana_Result = 0
+			Start_al
+		 		WHILE  ((Ana_Result = 0) AND (DOUT[O_SensEnd]=FALSE)) DO
+		 			DELAY 2
+					IF Ana_Result = 1 THEN 
+								
+						PointFound = TRUE
+						DOUT[O_SensStop]=TRUE
+							
+						SensArr[1] = $SCR_GRP[Robot].$MCH_ANG[1]
+						SensArr[2] = $SCR_GRP[Robot].$MCH_ANG[2]
+						SensArr[3] = $SCR_GRP[Robot].$MCH_ANG[3]
+						SensArr[4] = $SCR_GRP[Robot].$MCH_ANG[4]
+						SensArr[5] = $SCR_GRP[Robot].$MCH_ANG[5]
+						SensArr[6] = $SCR_GRP[Robot].$MCH_ANG[6]
+						SensArr[7] = $SCR_GRP[Robot].$MCH_ANG[7]
+						SensArr[8] = extjnt[2]
+						SensArr[9] = extjnt[3]
+						
+					ENDIF 
+					
+		 		ENDWHILE
+ 			
+		ENDIF
+         
+         	-- wait for robot to stop motion
+ 		IF Robot = 1 THEN
+ 			WAIT FOR DOUT[O_R1]=FALSE
+ 		else
+ 			WAIT FOR DOUT[O_R3]=FALSE
+ 		ENDIF
+ 		
+	IF PointFound = TRUE THEN
+		--For Tool Sensing
+		IF ToolP=9999  THEN 
+			
+			Gotpoint = CURPOS(0,0,robot) 
+			CNV_REL_JPOS(SensArr, JPos_Test, StatMo) 
+			$GROUP[robot].$UFRAME = $MNUFRAME[robot, 6] 
+			Pos_sel
+			ToolZ=Sens_Pos.Pos_Select.Z -- to get retraction point
+			
+			$GROUP[robot].$UFRAME = $MNUFRAME[robot, 2] 
+			Pos_sel
+							
+			IF tool_dir = 1 THEN
+				ToolP=Sens_Pos.Pos_Select.X
+			ENDIF
+			
+			IF tool_dir = 2 THEN
+				ToolP=Sens_Pos.Pos_Select.Y
+			ENDIF
+			
+			IF tool_dir = 3 THEN
+				ToolP=Sens_Pos.Pos_Select.Z
+			ENDIF
+
+		ENDIF
+				
+		$GROUP[robot].$UFRAME = $MNUFRAME[robot, 2] 
+		Gotpoint = CURPOS(0,0,robot)
+		CNV_REL_JPOS(SensArr, JPos_Test, StatMo) 
+		Pos_sel
+		
+	ENDIF
+
+	
+	DELAY 20
+	RETURN (Sens_Pos)
+END Mot_Sens
+
+--***********************************************************************************************
+-- ROUTINE -->> Flytter robot til MP                    
+--***********************************************************************************************
+ ----2015-03-11: virker.
+ROUTINE Motion  --(PosDest:XYZWPREXT;ForceCh:INTEGER)
+BEGIN
+
+	SET_EPOS_REG(10,posdest,STATUS,robot)
+	set_IReg(85,movespeed)
+	--Set_IReg(96,2) -- set en alpt's
+ 	DELAY 20
+ 		
+ 		IF Robot=1 THEN -- Robot 1
+ 			wait for DOUT[101] = FALSE
+ 			CALL_PROG('sens1',statmpl)
+
+		ENDIF
+ 					
+		IF Robot=3 THEN -- Robot 3
+			wait for DOUT[103] = FALSE
+			CALL_PROG('sens3',statmpl)
+		ENDIF	
+		
+	--WITH $SPEED = MoveSpeed, $USERELACCEL = FALSE,$USEMAXACCEL = FALSE, $TERMTYPE = FINE
+		--MOVE TO Pos_Eval.Pos_Select,
+			--WHEN Cor_val = 20 DO Cor_val = 20
+		--ENDMOVE
+	
+	
+	
+END Motion
+
+--***********************************************************************************************
+-- ROUTINE -->> Converting point from userframe 2 to 1
+-- ***********************************************************************************************
+
+ROUTINE ConvertPoint  -- (PointUF2:XYZWPREXT): XYZWPREXT FROM FunktLib
+	VAR
+	diff_ang: REAL
+	
+BEGIN
+	
+	
+		--Getting values from UserFrame2
+		mp[1]=$MNUFRAME[robot,1]
+		mp[2]=$MNUFRAME[robot,2]
+		
+		diff_ang = mp[1].p-mp[2].p
+		
+		
+		
+			--$GROUP[robot].$UFRAME = $MNUFRAME[robot, 9]
+			--Act_pos(1,robot)
+			
+			
+			--$GROUP[robot].$UFRAME = $MNUFRAME[robot, 6] 
+			
+	
+	
+	PointUF1.x=1
+	PointUF1=PointUF2
+	RETURN (PointUF1)
+
+
+END ConvertPoint
+
+--***********************************************************************************************
+-- ROUTINE -->> Closes laserdoor and Check on laser dist
+-- ***********************************************************************************************
+
+ROUTINE CloseDoor  -- Closes laserdoor and Check on laser dist
+VAR
+int_local: INTEGER
+	
+BEGIN
+	
+	IF robot=1 THEN 
+		RO_laserLit=RO_LaserLit1
+		O_SLaser=O_SLaser1
+		IA_Slaser=IA_Slaser1
+	else
+		RO_laserLit=RO_LaserLit2
+		O_SLaser=O_SLaser2
+		IA_Slaser=IA_Slaser2
+	ENDIF
+		
+		RDO[RO_LaserLit] = FALSE	-- close laserhouse
+		DOUT[O_SLaser] = TRUE	-- Power on laser
+		int_local=0
+		
+		REPEAT 
+			int_local=int_local+1
+			
+			DELAY 100
+		
+		UNTIL ((AIN[IA_Slaser]<5000) OR (int_local>50))
+		
+		-- go to error, if not in simulation mode
+		IF ((int_local>50) AND (Get_IReg(494)=0)) THEN 
+			errorno=512
+			errorreq=TRUE
+			
+			ABORT
+		else
+			DOUT[O_SLaser] = false	-- Power on laser
+		ENDIF	
+
+END CloseDoor
+	
+	
+	
+BEGIN
+$GROUP[1].$UFRAME = $MNUFRAME[1, 2] 
+	$GROUP[1].$UTOOL = $MNUTOOL[1, 3]
+	$GROUP[3].$UFRAME = $MNUFRAME[3, 2] 
+	$GROUP[3].$UTOOL = $MNUTOOL[3, 3]
+
+
+END FunktLib
+

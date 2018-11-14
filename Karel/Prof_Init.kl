@@ -1,0 +1,1201 @@
+PROGRAM Prof_Init
+
+%COMMENT = 'Vers. 2.0-rafa'
+	%NOPAUSESHFT
+	%NOPAUSE = ERROR + TPENABLE
+	%NOABORT = ERROR 
+	--%NOLOCKGROUP
+
+TYPE
+	%INCLUDE Types
+	
+
+VAR
+	%INCLUDE Gvars
+	%INCLUDE MPL_Vars
+	
+	file_var : FILE
+	FileName, name		FROM WeldPerf: STRING[30]
+		STATUS : INTEGER
+	i,n	: INTEGER -- loop counter
+	NumStr : STRING[3]
+	Cxy,Cheigth : REAL
+	Cside,Crat : INTEGER
+	realtemp: REAL
+	real_tmp: REAL
+	realtemp1,realtemp2, realtemp3, dist4,dist5: REAL
+	Booltemp: BOOLEAN
+	int_tmp: INTEGER
+	
+	
+	
+	--STATUS  		FROM FunktLib: INTEGER 		-- The status of the operation of GET_REG
+	Bool 			FROM FunktLib: BOOLEAN		-- Recieves flag IF reg value is a REAL
+	Int				FROM FunktLib: INTEGER		-- Contains reg val if an Integer		
+	Reall			FROM FunktLib: REAL			-- Contains reg val if a Real
+	text1 			FROM funktlib:STRING[1]
+	fjntArr 		FROM funktlib :ARRAY[9] OF REAL  --JArr
+	Pos_Eval 	FROM FunktLib :Pos_Chk	
+	Move_Pos	FROM FunktLib :Pos_Chk
+	test FROM funktlib: INTEGER
+	Point, Point1 ,point3, point2	FROM funktlib :XYZWPREXT
+	Point9  :XYZWPR
+	Jpoint2 FROM funktlib :JOINTPOS
+	errorval FROM FunktLib :INTEGER
+	posdest FROM funktlib :XYZWPREXT
+	
+	
+	Retract FROM funktlib: INTEGER  -- temp
+	SearcSign FROM funktlib: BOOLEAN --temp
+	 
+	 
+
+ROUTINE Get_IReg (Number : INTEGER) :INTEGER FROM FunktLib
+ROUTINE Get_RReg (Number : INTEGER) :REAL FROM FunktLib
+ROUTINE Set_IReg (Number : INTEGER; Value : INTEGER) FROM FunktLib
+ROUTINE Set_RReg (Number : INTEGER; Value : REAL) FROM FunktLib
+ROUTINE Def_PR (OutNr   : INTEGER; ReqD :INTEGER;ReqL:REAL;G1: INTEGER; G2:INTEGER; G3:INTEGER) FROM FunktLib
+ROUTINE Act_Pos(MPNr   : INTEGER;rob : INTEGER) FROM FunktLib -- put aktuelle position i MP [nummer]
+ROUTINE Motion(PosDest:XYZWPREXT;ForceCh:INTEGER) FROM FunktLib
+
+ROUTINE NB_check FROM GeoLib -- checking neighbour profiles
+
+-- test sensning
+ROUTINE Searching(DirNum:INTEGER; SearchLen:INTEGER; Retract:INTEGER;SearcSign: BOOLEAN;Err_Cond:INTEGER):REAL FROM FunktLib
+ROUTINE ReadFile FROM Prof_Init
+ROUTINE Readcross FROM Prof_Init
+
+ROUTINE Task_qen FROM proj_conf -- to reload tasklist
+
+
+---------------------------------------------------------------------------------------------------------
+-- ROUTINE ReadFile 
+--  Reads panel file
+---------------------------------------------------------------------------------------------------------
+ROUTINE ReadFile 
+VAR
+no1 :INTEGER
+
+BEGIN
+	-- Delete variables from profiles to make sure we do not weld same panel twice
+	FOR i=1 TO 30 DO
+		profile[i].x1=0
+		profile[i].y1=0
+		profile[i].top1=0
+		profile[i].end1=0
+		profile[i].FL11=0
+		profile[i].FL12=0
+		profile[i].Stop1=0
+		profile[i].SFL11=0
+		profile[i].SFL12=0
+		profile[i].SLength11=0
+		profile[i].SLength12=0
+		profile[i].x2=0
+		profile[i].y2=0
+		profile[i].top2=0
+		profile[i].end2=0
+		profile[i].FL21=0
+		profile[i].FL22=0
+		profile[i].Stop2=0
+		profile[i].SFL21=0
+		profile[i].SFL22=0
+		profile[i].SLength21=0
+		profile[i].SLength22=0
+		profile[i].crossno=0
+	ENDFOR
+	
+	
+	FileName =  'fr:\profiles.txt'
+	
+	IF get_ireg(492)=1 THEN
+		FileName =  'fr:\profiles1.txt'
+	ENDIF
+	IF get_ireg(492)=2 THEN
+		FileName =  'fr:\profiles2.txt'
+	ENDIF
+	IF get_ireg(492)=3 THEN
+		FileName =  'fr:\profiles3.txt'
+	ENDIF
+
+	OPEN FILE file_var ('RO', FileName)
+	STATUS = IO_STATUS(file_var)
+	IF STATUS = 0 THEN 
+		i=0
+		REPEAT
+			i=i+1
+			--nn=i
+			IF STATUS = 0 THEN
+				-- læser værdierne fra hver linje ind i de respektive variabel navne
+				READ file_var(profile[i].x1, profile[i].y1, profile[i].top1, profile[i].end1, profile[i].FL11,profile[i].FL12, profile[i].Stop1, profile[i].SFL11, profile[i].SFL12, profile[i].SLength11, profile[i].SLength12,
+							     profile[i].x2, profile[i].y2, profile[i].top2, profile[i].end2, profile[i].FL21,profile[i].FL22, profile[i].Stop2, profile[i].SFL21, profile[i].SFL22, profile[i].SLength21,profile[i].SLength22,
+							     profile[i].crossno)
+					
+				STATUS = IO_STATUS(file_var)	
+				
+			ENDIF	
+
+		UNTIL STATUS <>0
+		Set_IReg(231,i-1)
+	ENDIF	
+	CLOSE FILE file_var
+
+END ReadFile
+---------------------------------------------------------------------------------------------------------
+-- ROUTINE Readcross
+--  Reads cross file for profile
+----------------------------------------------------------------------------------------------------
+ROUTINE Readcross
+VAR
+no1 :INTEGER
+
+BEGIN
+	CNV_INT_STR(jobNo,1,0,NumStr)
+	i = STR_LEN(NumStr)
+	NumStr = SUB_STR(NumStr,2,i-1)
+
+	FileName =  'fr:\cross'+ numstr + '.txt'
+	
+	IF swap_end = FALSE THEN
+		OPEN FILE file_var ('RO', FileName)
+		STATUS = IO_STATUS(file_var)
+		IF STATUS = 0 THEN 
+			i=0
+			REPEAT
+				i=i+1
+				--nn=i
+				IF STATUS = 0 THEN
+					-- læser værdierne fra hver linje ind i de respektive variabel navne
+					READ file_var(cross[i].xy,cross[i].side,cross[i].heigth,int_tmp)
+						
+					STATUS = IO_STATUS(file_var)	
+					
+				ENDIF	
+	
+			UNTIL STATUS <>0
+			
+		ENDIF	
+		CLOSE FILE file_var
+	ENDIF
+	
+	-- swap direction depending on Profile dir.
+	IF swap_end = TRUE THEN
+		OPEN FILE file_var ('RO', FileName)
+		STATUS = IO_STATUS(file_var)
+		IF STATUS = 0 THEN 
+			
+			n=profile[jobno].crossno
+			Cxy = 0
+			Cside=0
+			Cheigth=0
+			Crat=0
+			FOR i = 1 TO profile[jobno].crossno DO 
+				READ file_var(Cxy,Cside,Cheigth,Crat)
+				cross[n].xy=Cxy
+				cross[n].side=Cside
+				cross[n].heigth=Cheigth
+				n=n-1
+			ENDFOR
+		ENDIF	
+		CLOSE FILE file_var
+	ENDIF
+
+END Readcross
+
+----------------------------------------------------------------------------------------------------
+
+BEGIN
+
+-- Setting UF and tools: 
+
+$GROUP[1].$UFRAME = $MNUFRAME[1, 1] 
+$GROUP[2].$UFRAME = $MNUFRAME[2, 1] 
+$GROUP[3].$UFRAME = $MNUFRAME[3, 1] 
+$GROUP[1].$UTOOL = $MNUTOOL[1, 1]
+$GROUP[2].$UTOOL = $MNUTOOL[2, 1]
+$GROUP[3].$UTOOL = $MNUTOOL[3, 1]
+
+	
+	startLabel::
+	
+	--Resetting: 
+	SkipEndMove = FALSE
+	swap_end=FALSE
+	
+	kl_step=0
+	
+	--Swap robot reg
+	Set_IReg(179,1)
+	
+	Set_IReg(469,0) -- stay down
+	Set_IReg(470,0) -- stay up
+	
+	--Crossings: 	
+	Cross_num=0
+	Cross_cnt=0
+	Cross_num1=0
+	parts_cnt1=0
+	Cross_num3=0
+	parts_cnt3=0
+	
+	--Skip positions for jumping
+	Set_RReg(461,0)
+	Set_RReg(462,0)
+	Set_RReg(463,0)
+	Set_RReg(464,0)
+	Set_IReg(291,0)
+	Set_IReg(292,0) 
+	Set_IReg(293,0)-- last piece
+	Set_IReg(294,0)-- weldback using gantry
+	
+	-- gap detect
+	set_ireg(480,0)
+	
+--	disX_start=FALSE
+--disX_end = FALSE
+	dis_start=0
+	dis_end = 0
+	midweld=TRUE
+	ShortEnd=0
+	--WB_Start1 =0
+	--WB_Start3=0
+	--WB_End1=0
+	--WB_End3=0
+	
+	NB_back=0 -- checking on profiles behind -> done in GeoLib
+	NB_back1=0
+	NB_back3=0
+	
+	NB_side=0 -- checking on profiles behind -> done in GeoLib
+	NB_side1=0
+	NB_side3=0
+	
+	swap_end=FALSE
+	swap_back=FALSE
+
+		
+	jobNo=get_ireg(230)
+	
+--*****************************************************
+--*****************  Loading information************
+--*****************************************************
+	-- Read text file from skanning
+	-- all profiles are loaded for every profile
+	Loadfile::
+	task_qen -- resetting tasklist1
+	ReadFile 
+	
+
+	-- Reading information from current profile
+	X_start=profile[jobNo].x1
+	Y_start=profile[jobNo].y1
+	X_end=profile[jobNo].x2
+	Y_end=profile[jobNo].y2
+	
+	-- currently not used
+	--ProEnd1 = profile[jobNo].end1
+	--ProEnd2 = profile[jobNo].end2
+	--FLP11=profile[jobNo].FL11
+	--FLP12=profile[jobNo].FL12
+	--SFL1O=profile[jobNo].SFL11
+	--SFL1R=profile[jobNo].SFL12
+	--SFL2R=profile[jobNo].SFL21
+	--SFL2O=profile[jobNo].SFL22
+	
+	-- Side profiles present or not
+	sideP1=0
+	sideP2=0
+	SideP=0
+	IF ((profile[JobNo].SLength11<>0) OR (profile[JobNo].SLength12<>0)) THEN
+		SideP1=1
+	ENDIF
+	IF ((profile[JobNo].SLength21<>0) OR (profile[JobNo].SLength22<>0)) THEN
+		SideP2=1
+	ENDIF
+	
+--*****************************************************
+--*****  over all dimensions of the profile*********
+--*****************************************************
+	-- Setting X diff
+	PDx =ABS(X_end -X_start )
+	set_RReg(77,Pdx)
+	X_flag=0
+	
+	
+	-- Setting Y diff
+	PDy=ABS(Y_end-Y_start)
+	set_RReg(78,Pdy)
+	
+	--Length
+	PLeng = SQRT(Pdx*Pdx+Pdy*Pdy)
+	set_RReg(79,Pleng)
+	
+	--Setting Short profile
+	Short_prof=FALSE
+	IF PLeng<300 THEN 
+		Short_prof=TRUE
+	endif
+
+	
+	--*****************************************************
+	--*****************  Swapping direction ***********
+	--*****************************************************
+	
+	IF swap_back = FALSE THEN -- Swap_back is set after calculation of parts. later in this program
+		-- delta X and Y
+		PDx =ABS(X_end -X_start )
+		PDy=ABS(Y_end-Y_start)
+			
+		--Profile direction
+		IF Pdx>Pdy THEN
+			--X direction
+			act_pos(1,2)
+			IF ((ABS(mp[1].x - X_start))>(ABS(mp[1].x - X_end))) THEN
+				swap_end=TRUE -- swap endpoints
+			ENDIF
+		else
+			--Y direction
+			act_pos(1,1)
+			IF ((ABS(mp[1].ext1 - Y_start))>(ABS(mp[1].ext1 - Y_end))) THEN
+				swap_end=TRUE -- swap endpoints
+			ENDIF
+		ENDIF
+		
+		
+		
+		--IF (Pleng<500) THEN -- Short profiles with one side. Start at side
+		-- start at free end, in order to save time
+			IF ((SideP1<>0) AND (SideP2=0)) THEN
+				swap_end=TRUE
+			ENDIF
+			IF ((SideP2<>0) AND (SideP1=0)) THEN
+				swap_end=false
+			ENDIF		
+		--ENDIF 
+	ENDIF
+	
+	IF swap_end = TRUE THEN -- swap direction
+		X_start=profile[jobNo].x2
+		Y_start=profile[jobNo].y2
+		X_end=profile[jobNo].x1
+		Y_end=profile[jobNo].y1
+		
+		--currently not in use
+		--FLP11=profile[jobNo].FL21
+		--FLP12=profile[jobNo].FL22
+		--SFL1O=profile[jobNo].SFL21 -- temp : make sketch
+		--SFL1R=profile[jobNo].SFL22
+		--SFL2R=profile[jobNo].SFL11
+		--SFL2O=profile[jobNo].SFL12
+		--ProEnd1 = profile[jobNo].end2
+		--ProEnd2 = profile[jobNo].end1
+		
+		-- if side profiles are present or not
+		i=sideP1
+		SideP1=SideP2
+		SideP2=i		
+		
+	ENDIF
+		
+	--user/inrotech input
+	X_limit=Get_RReg(64)
+	weld_off=Get_IReg(74)
+	ON_dis =Get_IReg(88)
+	OFF_dis =Get_IReg(89)
+	Lap =Get_IReg(90)
+	--Cross_dis =Get_RReg(91)
+	Cross_dis=500-- overrides cross_dis
+	IF Get_Ireg(495)=21232 THEN -- temp for china fat
+		cross_dis=300 -- temp
+	ENDIF
+	Set_Rreg(91,cross_dis)
+
+	Robot_dis =Get_RReg(93)
+	
+	done = FALSE
+	
+	------------ Welding directions ----------------
+	-- X/Y direction
+	IF Pdx>Pdy THEN
+		XY_dir=1
+	else
+		XY_dir=2
+	ENDIF
+	Set_IReg(81,XY_dir)
+	
+	-- X +/- direction
+	IF X_end> X_start THEN
+			X_dir=1
+	else
+			X_dir=-1
+	ENDIF
+	Set_IReg(82,X_dir)
+	
+	-- Y +/- direction
+	IF Y_end > Y_start THEN
+		Y_dir=1
+	else
+		Y_dir=-1
+	ENDIF
+	Set_IReg(83,Y_dir)
+	
+	Set_RReg(67,0) -- never use arm opposite position
+		
+		-- Setting regisers from registers
+	Set_RReg(58,X_start)
+	Set_RReg(59,Y_start)
+	Set_RReg(60,X_end)
+	Set_RReg(61,Y_end)
+	
+--*****************************************************
+--*****************  Parts ************************
+--*****************************************************
+
+-- Resettting all parts
+
+FOR i=1 TO 10 DO 
+	parts1[i].xy_start=0
+	parts1[i].xy_end=0
+	parts1[i].heigth=0
+	parts1[i].dist=0
+	parts1[i].OO1=0
+	parts1[i].OO2=0
+	
+	parts3[i].xy_start=0
+	parts3[i].xy_end=0
+	parts3[i].heigth=0
+	parts3[i].dist=0
+	parts3[i].OO1=0
+	parts3[i].OO2=0
+ENDFOR
+	
+	
+	-- Getting Crossing Max heigths
+	Set_RReg(67,0)
+	set_IReg(287,0) 
+		
+		Cross_num=0
+		cross_num1=0
+		cross_num3=0
+		parts_cnt1=0
+		parts_cnt3=0
+	
+	-- Only read file if we have crosses
+	IF profile[jobNo].crossno <> 0 THEN
+		readcross -- get cross file
+		Cross_num=profile[jobNo].crossno
+		Set_IReg(62,cross_num)
+	ENDIF
+	
+		
+		-- Loop through crosses to count jumps for each robot
+		-- XY i start of part
+		-- determin loop number
+		IF cross_num<>0 THEN 
+			int_tmp=cross_num
+		else
+			int_tmp=1
+		ENDIF
+			
+		FOR i = 1 TO  int_tmp  DO 
+				IF i=1 THEN -- if first part
+					IF XY_dir=1 THEN
+						parts1[i].XY_start=X_start
+						parts3[i].XY_start=X_start
+					else
+						parts1[i].xy_start=Y_start
+						parts3[i].xy_start=Y_start
+					ENDIF
+				ENDIF
+			
+			-- Only if we have crosses	
+			IF profile[jobNo].crossno>0 THEN 			
+				IF  (XY_dir = 1) THEN -- profiles in X dir
+					IF (cross[i].side = -1)  THEN
+						cross_num1=cross_num1+1
+						parts1[cross_num1].xy_end=cross[i].xy -- end of current part
+						parts1[cross_num1].Heigth=cross[i].Heigth
+						parts1[cross_num1+1].xy_start=cross[i].xy -- start on next part
+					ENDIF
+					IF (cross[i].side = 1)  THEN
+						cross_num3=cross_num3+1
+						parts3[cross_num3].xy_end=cross[i].xy
+						parts3[cross_num3].Heigth=cross[i].Heigth
+						parts3[cross_num3+1].xy_start=cross[i].xy-- start on next part
+					ENDIF
+				ENDIF
+				
+				IF  (XY_dir = 2) THEN -- profiles in Y dir
+					IF (cross[i].side = -1)  THEN
+						cross_num3=cross_num3+1
+						parts3[cross_num3].xy_end=cross[i].xy
+						parts3[cross_num3].Heigth=cross[i].Heigth
+						parts3[cross_num3+1].xy_start=cross[i].xy-- start on next part
+					ENDIF
+					IF (cross[i].side = 1)  THEN
+						cross_num1=cross_num1+1
+						parts1[cross_num1].xy_end=cross[i].xy
+						parts1[cross_num1].Heigth=cross[i].Heigth
+						parts1[cross_num1+1].xy_start=cross[i].xy -- start on next part
+					ENDIF
+				ENDIF
+		
+				IF  (Cross[i].side = 2) THEN -- add up both robot counts
+					cross_num1=cross_num1+1
+					cross_num3=cross_num3+1
+					parts1[cross_num1].xy_end=cross[i].xy
+					parts1[cross_num1].Heigth=cross[i].Heigth
+					parts1[cross_num1+1].xy_start=cross[i].xy -- start on next part
+					parts3[cross_num3].xy_end=cross[i].xy
+					parts3[cross_num3].Heigth=cross[i].Heigth
+					parts3[cross_num3+1].xy_start=cross[i].xy-- start on next part
+					
+				ENDIF
+			ENDIF
+		
+		ENDFOR
+		
+	parts_num1=cross_num1+1-- total parts
+	parts_num3=cross_num3+1-- total parts
+	
+	-- end point for last part
+	IF XY_dir=1 THEN
+		parts1[parts_num1].xy_end=X_end
+		parts3[parts_num3].xy_end=X_end
+	else
+		parts1[parts_num1].xy_end=Y_end
+		parts3[parts_num3].xy_end=Y_end
+	ENDIF
+
+
+
+
+--************************************************************	
+-- Setting dist, ON and OFF values... use in jumping PB_main
+--************************************************************	
+-- Storing profile direction
+	IF XY_dir = 1 THEN 
+		dir_store=X_dir
+	else
+		dir_store=Y_dir
+	ENDIF
+	
+	ShortEnd=0
+-- ********* Robot 1 ***************************************
+-- Finding distance for part
+	FOR i = 1 TO  Parts_num1 DO
+		parts1[i].dist=ABS(parts1[i].xy_end-parts1[i].xy_start)
+	ENDFOR
+	
+	FOR i = 1 TO  Parts_num1 DO -- 
+	--ON + OFF values
+		Cross_dis =Get_RReg(91)-- resetting cross_dis
+		
+		-- if more than 1 part
+		IF ((parts1[i].dist>2*cross_dis) AND (parts_num1>1)) THEN 
+			-- Long parts
+			-- adjusting cross_dis for semi long parts	
+				IF ((parts1[i].dist<2*cross_dis+100) AND (parts_num1>1)) THEN 
+					cross_dis=cross_dis-100
+				ENDIF	
+				
+			parts1[i].OO1=parts1[i].xy_start+cross_dis*dir_store
+			parts1[i].OO2=parts1[i].xy_end-cross_dis*dir_store
+		
+		else
+			-- short 
+			parts1[i].OO1=parts1[i].xy_start+parts1[i].dist/2*dir_store
+			parts1[i].OO2=parts1[i].xy_end-parts1[i].dist/2*dir_store
+			
+		ENDIF
+	ENDFOR
+	
+	-- ********* Robot 3 ***************************************
+-- Finding distance for part
+	FOR i = 1 TO  Parts_num3 DO
+		parts3[i].dist=ABS(parts3[i].xy_end-parts3[i].xy_start)
+	ENDFOR
+	
+	FOR i = 1 TO  Parts_num3 DO -- 
+	--ON + OFF values
+		Cross_dis =Get_RReg(91)-- resetting cross_dis
+		
+		-- if more than 1 part
+		IF ((parts3[i].dist>2*cross_dis) AND (parts_num3>1)) THEN 
+			-- Long parts
+			-- adjusting cross_dis for semi long parts	
+				IF ((parts3[i].dist<2*cross_dis+100) AND (parts_num3>1)) THEN 
+					cross_dis=cross_dis-100
+				ENDIF	
+				
+			parts3[i].OO1=parts3[i].xy_start+cross_dis*dir_store
+			parts3[i].OO2=parts3[i].xy_end-cross_dis*dir_store
+		
+		else
+			-- short 
+			parts3[i].OO1=parts3[i].xy_start+parts3[i].dist/2*dir_store
+			parts3[i].OO2=parts3[i].xy_end-parts3[i].dist/2*dir_store
+			
+		ENDIF
+	ENDFOR	
+		
+	
+	-- setting WB_start in register
+	--set_RReg(296,WB_start1)
+
+	
+	--**********************************************************
+	--****** Using one Robot TO weld both sides ********
+	--*********************************************************		
+--  Resetting
+Set_IReg(290,0) -- swap start
+swap_R_start=0
+swap_R_end=0
+
+
+IF XY_dir=1 THEN
+		-- Start  of profile R1
+		IF ((X_dir=1) AND (SideP1<>0))  THEN		
+			Swap_R_start=1
+			-- Disabling task for R3
+			FOR i = 4  TO 16  DO
+				TaskList3[i].enabled=FALSE
+			ENDFOR
+			
+			-- Enabling extra task for R1
+			IF NB_side<>10 THEN 			
+				FOR i = 9 TO 16 DO
+					TaskList1[i].enabled=TRUE
+				ENDFOR
+			ENDIF
+		ENDIF
+		
+		
+		IF ((X_dir=-1) AND (SideP1<>0))  THEN		
+		-- Start  of profile R3
+			Swap_R_start=3
+			-- Disabling task for R1
+			FOR i = 4  TO 16  DO
+				TaskList1[i].enabled=FALSE
+			ENDFOR
+			-- Enabling extra task for R3
+			FOR i = 9 TO 16 DO
+				TaskList3[i].enabled=TRUE
+			ENDFOR
+		ENDIF
+			
+			--******************************************
+			
+				-- End of profile
+		IF ((X_dir=-1) AND (SideP2<>0))  THEN		
+				-- End  of profile R1
+			Swap_R_END=1
+			-- Disabling task for R3
+			FOR i = 19  TO 30  DO
+				TaskList3[i].enabled=FALSE
+			ENDFOR
+			-- Enabling extra task for R1
+			FOR i = 25 TO 30 DO
+				TaskList1[i].enabled=TRUE
+			ENDFOR
+		ENDIF
+		
+	
+		IF ((X_dir=1) AND (SideP2<>0))  THEN		
+				-- End  of profile R3
+			Swap_R_END=3
+			-- Disabling task for R1
+			FOR i = 19  TO 30  DO
+				TaskList1[i].enabled=FALSE
+			ENDFOR
+			-- Enabling extra task for R3
+			FOR i = 25 TO 30 DO
+				TaskList3[i].enabled=TRUE
+			ENDFOR
+			
+		ENDIF
+	
+	--Exeptions: 
+	-- Checking for side profiles
+	IF ((swap_R_start<>0) AND (swap_R_end<>0)) THEN 
+		--Checking for close side profile
+		Robot=1
+		NB_Side=0
+		NB_Check
+		-- disable robot 1 side, if side profile is too close
+		IF NB_Side=10 THEN 
+			FOR i = 5  TO 9  DO
+			TaskList1[i].enabled=FALSE
+			ENDFOR
+			FOR i = 19  TO 24  DO
+				TaskList1[i].enabled=FALSE
+			ENDFOR
+			
+			FOR i = 10  TO 16  DO
+				TaskList3[i].enabled=FALSE
+			ENDFOR
+			FOR i = 25  TO 30  DO
+				TaskList3[i].enabled=FALSE
+			ENDFOR
+			
+		ENDIF
+		
+		
+		Robot=3
+		NB_Side=0
+		NB_Check
+		-- disable robot 1 side, if side profile is too close
+		IF NB_Side=10 THEN 
+			FOR i = 5  TO 9  DO
+			TaskList3[i].enabled=FALSE
+			ENDFOR
+			FOR i = 19  TO 24  DO
+				TaskList3[i].enabled=FALSE
+			ENDFOR
+			
+			FOR i = 10  TO 16  DO
+				TaskList1[i].enabled=FALSE
+			ENDFOR
+			FOR i = 25  TO 30  DO
+				TaskList1[i].enabled=FALSE
+			ENDFOR
+			
+		ENDIF
+		
+	ENDIF 
+
+ENDIF
+
+--Setting registers -- for swap_r_end, used in PB_main
+set_Ireg(295,swap_r_end)
+
+	
+--*****************************************************
+--********** Swap_back start/end of profile**********
+--*****************************************************
+-- swap_back if too short distance from start to first cross and side profiles
+--2018-08-13 Now we can handle sensing with only one robot, so this section is not needed anymore
+
+--IF ((SideP1<>0)) THEN
+--IF swap_back=FALSE THEN 
+	--IF (((parts1[1].skip<>0) AND (parts1[1].dist<500)) OR ((parts3[1].skip<>0) AND (parts3[1].dist<450))) THEN
+		--IF swap_end=FALSE THEN 
+			--swap_end=TRUE
+		--else
+			--swap_back=TRUE
+			--swap_end=FALSE
+		--ENDIF
+		--GOTO loadfile
+	--endif
+--ENDIF
+
+	
+--*****************************************************
+--********** Handling Short profiles  ****************
+--*****************************************************
+	
+--****************** Skipping short X-profiles ********************
+	IF (XY_dir=1) THEN
+		
+		-- Skipping very short profiles
+		IF  (Pleng < 250) THEN 
+				SkipProf=TRUE -- skips profile in taskman 
+				ABORT
+		ENDIF
+		
+	ENDIF
+	
+
+--*****************************************************
+--****** Disable START or END of shaddowed  profiles *****
+--*****************************************************
+-- if start or end of X profile has a high Y profile crossing
+-- if Y-profile is too close or too high
+
+IF XY_dir=1 THEN
+		-- Start of profile
+		IF  ((SideP1=0) AND (Cross_num<>0)) THEN 
+			-- inclination of profile
+			--real_tmp=Cross[1].Heigth/(ABS(cross[1].xy-X_start))
+			--IF real_tmp>1 THEN 
+				--disX_start=TRUE
+			--ENDIF 
+			IF (parts1[1].dist<400) THEN
+				--disX_start=TRUE
+				dis_start=1
+			ENDIF
+			IF (parts3[1].dist<400) THEN
+				--disX_start=TRUE
+				dis_start=dis_start+3
+			ENDIF
+			
+		ENDIF
+		
+		-- END of profile
+		IF  ((SideP2=0) AND (Cross_num<>0)) THEN 
+			-- inclination of profile
+			--real_tmp=Cross[cross_num].Heigth/(ABS(cross[cross_num].xy-X_end))
+			--IF real_tmp>1 THEN 
+				--disX_end=TRUE
+			--ENDIF 
+			
+			IF (parts1[parts_num1].dist<400) THEN
+				--disX_start=TRUE
+				dis_end=1
+			ENDIF
+			IF (parts3[parts_num3].dist<400) THEN
+				--disX_start=TRUE
+				dis_end=dis_end+3
+			ENDIF
+		ENDIF
+		
+ENDIF
+
+-- disable start or end of profiles for Y-profiles
+IF XY_dir=2 THEN 
+	IF  ((SideP1=0) AND (Cross_num<>0)) THEN 
+			-- inclination of profile
+			--real_tmp=Cross[1].Heigth/(ABS(cross[1].xy-X_start))
+			--IF real_tmp>1 THEN 
+				--disX_start=TRUE
+			--ENDIF 
+			IF (parts1[1].dist<200) THEN
+				--disX_start=TRUE
+				dis_start=1
+			ENDIF
+			IF (parts3[1].dist<200) THEN
+				--disX_start=TRUE
+				dis_start=dis_start+3
+			ENDIF
+			
+		ENDIF
+		
+		-- END of profile
+		IF  ((SideP2=0) AND (Cross_num<>0)) THEN 
+			-- inclination of profile
+			--real_tmp=Cross[cross_num].Heigth/(ABS(cross[cross_num].xy-X_end))
+			--IF real_tmp>1 THEN 
+				--disX_end=TRUE
+			--ENDIF 
+			
+			IF (parts1[parts_num1].dist<200) THEN
+				--disX_start=TRUE
+				dis_end=1
+			ENDIF
+			IF (parts3[parts_num3].dist<200) THEN
+				--disX_start=TRUE
+				dis_end=dis_end+3
+			ENDIF
+		ENDIF
+ENDIF
+
+	-- Setting register for end welding
+	set_IReg(291,dis_start)
+	set_IReg(292,dis_end)
+	
+	--Disabling tasks for start or end of profile for eather robot
+--IF dis_start=TRUE THEN -- disable task for sensing etc
+			FOR i = 4  TO 16  DO
+				IF ((Dis_start=1) OR (dis_start=4)) THEN  				
+					TaskList1[i].enabled=FALSE
+					Tasklist1[i].Done=TRUE
+				ENDIF
+				IF ((Dis_start=3) OR (dis_start=4)) THEN  		
+					TaskList3[i].enabled=FALSE
+					Tasklist3[i].Done=TRUE
+				ENDIF	
+			ENDFOR
+--ENDIF
+			FOR i = 19  TO 30  DO
+				IF ((Dis_end=1) OR (dis_end=4)) THEN  				
+					TaskList1[i].enabled=FALSE
+					Tasklist1[i].Done=TRUE
+				ENDIF
+				IF ((Dis_end=3) OR (dis_end=4)) THEN  		
+					TaskList3[i].enabled=FALSE
+					Tasklist3[i].Done=TRUE
+				ENDIF	
+			ENDFOR
+
+
+
+--******************************************************************
+-- For x profiles with no side, change taskname for end welding
+--******************************************************************
+IF ((XY_dir=1) AND (SideP2=0) AND (Dis_end<4)) THEN 
+	TaskList1[24].name = 'PB_EndM'
+	TaskList1[24].enabled=TRUE
+	
+	TaskList3[24].enabled=FALSE -- disable task for R3
+	
+	TaskList3[31].PreTask = 24 -- last fold
+	
+ENDIF
+
+
+--*****************************************************
+--***********  Jump start for Profiles *********
+-- ***IF start is disabled  or robot welds both sides***
+--*****************************************************
+-- Y profiles can always start sync
+
+-- Loop through parts, to see if sync welding to be done
+
+
+IF dis_start=4 THEN 
+	Set_Ireg(291,10)-- no profile welding
+		FOR i=1 TO parts_num1 DO
+			IF parts1[i].oo1<>parts1[i].oo2 THEN 
+				Set_Ireg(291,4)
+			ENDIF
+		ENDFOR
+		
+		FOR i=1 TO parts_num3 DO
+			IF parts3[i].oo1<>parts3[i].oo2 THEN 
+				Set_Ireg(291,4)
+			ENDIF
+		ENDFOR
+ENDIF
+
+
+-- if start + end + sync welding is disabled -> skip profile
+	IF ((dis_start=4) AND (dis_end=4) AND (Get_Ireg(291)=10)) THEN
+		SkipProf=TRUE -- skips profile in taskman 
+		ABORT
+	ENDIF
+
+
+
+--*****************************************************
+--********** Handling Short  with side profile ****************
+--*****************************************************
+
+	IF ((XY_dir=1) AND (Swap_R_start<>0) AND (PLeng<600))THEN
+			Set_Ireg(291,10) -- no jump welding
+	ENDIF
+
+	
+	
+--*****************************************************
+--********** Disable clean R1 at end, if no side profile***************
+--*****************************************************
+IF sideP2=0 THEN 
+		TaskList1[21].enabled=FALSE
+		Tasklist1[21].Done=TRUE
+endif
+
+
+	--*********************************************************
+	--****************** INIT POSITION *******************
+	--*********************************************************
+	-- set flag for X gantry move
+	IF ((PDx>X_limit*2) AND (XY_dir=2)) THEN
+		X_flag=1
+	ENDIF
+	
+	robot=0
+	
+	dist=0 -- to avoid uni
+	Set_IReg(70,10)
+		
+	-- Gets start pos of X gantry
+	Point2=CURPOS(0,0,2) -- user position
+	Jpoint2 = CURJPOS(1,0,2) -- funny position
+	CNV_JPOS_REL( jpoint2, fjntArr, STATUS)
+	
+	-- Offset  Robots X offset
+	X_off=0
+	
+	-- in order to get better room for sensing and welding
+	--IF XY_dir = 1 THEN 
+		--X_off=50*X_dir
+		----2017-08-28: 100 mm is too much
+	--ENDIF
+
+	
+	IF XY_dir=2 THEN
+		IF PDX > X_limit THEN
+			X_diff =PDX-X_limit
+			X_off=X_diff/2
+			IF X_off>X_limit THEN
+				X_off = X_limit
+			ENDIF
+		ENDIF
+	ENDIF
+	
+	-- X offset for Arm up situations
+	--IF ((Get_IReg(67)=1) AND (XY_dir = 1)) THEN
+		--X_off = 125 * X_dir
+	--else 
+		--X_off=X_off*X_dir
+	--ENDIF
+	
+	Set_RReg(65,X_off)
+	
+	 --set start POS FOR X gantry
+	 --- temp
+	 --X_gantry=get_Rreg(66)
+	fjntArr[1]=fjntArr[1]/point2.x*(X_start+(X_off))
+		--
+	CNV_REL_JPOS(fjntArr,Jpoint2, STATUS)
+	SET_JPOS_REG(9,Jpoint2, STATUS,2)
+	--PAUSE
+	
+	
+	point9.x = X_start --???
+	
+	-- Setting Robots Y position for X dir
+	Point1=CURPOS(0,0,1)
+	Point3=CURPOS(0,0,3)
+	
+	Point1.y=Point1.y-(Point1.ext1-Y_start)
+	Point1.ext1=Y_start
+
+	Point3.y=Point3.y-(Point3.ext1-Y_start)
+	Point3.ext1=Y_start
+	
+	
+	-- handling offset depending on space between profiles
+	NB_Check
+	IF ((Dist_NextX1 < 1000) AND (Dist_NextX1<>0)) THEN 
+		ExtOffset1=Dist_NextX1/2
+	else
+		ExtOffset1 =350
+	ENDIF
+	
+	IF ((Dist_NextX3 <1000)  AND (Dist_NextX3<>0))  THEN 
+		ExtOffset3=Dist_NextX3/2
+	else
+		ExtOffset3 =350
+	ENDIF
+	
+	
+	IF XY_dir =1 THEN
+		
+		-- reducing external offset if profile length is short
+		IF pleng<1000 THEN 
+			ExtOffset1 =150
+			ExtOffset3 =150
+		ENDIF
+			
+		Point1.y=Point1.y-ExtOffset1 
+		Point3.y=Point3.y+ExtOffset3 
+		Point1.ext1=Point1.ext1-ExtOffset1 
+		Point3.ext1=Point3.ext1+ExtOffset3 
+	else
+		-- if Y-profile
+		-- use bigger distance for  small profiles
+		
+		--IF ((Pleng<500)) THEN
+			-- longer distance
+				IF (((SideP1 <> 0) AND (SideP2=0)) OR ((SideP2 <> 0) AND (SideP1=0)))THEN
+					--ExtOffset=400-- bigger distance
+				ENDIF		
+		
+		
+		
+	--	ENDIF
+		
+		Point1.y=Point1.y-ExtOffset1 *SE*Y_dir
+		Point1.ext1=Point1.ext1-ExtOffset1 *SE*Y_dir	
+		
+		
+		Point3.y=Point3.y-ExtOffset3 *SE*Y_dir
+		Point3.ext1=Point3.ext1-ExtOffset3 *SE*Y_dir	
+		
+		
+	ENDIF
+
+	Set_RReg(270,Point1.ext1)
+	Set_RReg(271,Point3.ext1)
+		
+	SET_EPOS_REG(9,Point1, STATUS,1)
+	--SET_POS_REG(9,Point9, STATUS,2)
+	SET_EPOS_REG(9,Point3, STATUS,3)
+	
+	
+	DELAY 20
+	
+--******************************************************	
+	
+	-- registers for R3 profile sens
+	-- TEMP
+	
+	--act_pos(8,2) --gets gantry pos
+	mp[8].x=(X_start+(X_off))
+	
+	--- X most be relative to gantry X!!!!
+	
+	IF XY_dir = 1 THEN -- X direction
+			ProE=X_start-mp[8].x
+			ProS=Y_start
+
+	ENDIF
+	
+	IF XY_dir = 2 THEN -- Y direction
+	
+			ProE=Y_start
+			ProS=X_start-mp[8].x
+	
+	ENDIF
+-- Sensing directions
+IF XY_dir = 1 THEN -- profile X direction
+	ProX=ProE
+	ProY=ProS
+else
+	ProX=ProS
+	ProY=ProE
+ENDIF
+	
+	--*********************************************************
+	--****************** Setting Userframe 2 ***************
+	--*********************************************************
+	
+		----- Angle of profile
+	--PDy=ABS(Y_end-Y_start)
+		--
+	--IF XY_dir = 1 THEN
+		---- X-profiles
+			--IF X_start<X_end THEN -- correct fortegn
+			--Pang=ASIN((Y_start-Y_end)/Pleng)
+		--else
+			--Pang=ASIN((Y_end-Y_start)/Pleng)
+		--ENDIF
+	--else
+		---- Y-profiles
+		--IF Y_start<Y_end THEN -- correct fortegn
+			--Pang=ASIN((X_end-X_start)/Pleng)
+		--else
+			--Pang=ASIN((X_start-X_end)/Pleng)
+		--ENDIF
+	--ENDIF
+	--
+	--set_RReg(80,Pang)
+	--PangPos=abs(Pang) -- positive angle
+	--
+	--mp[1]=$MNUFRAME[1,1]
+	--mp[1].r=mp[1].r+Pang
+	--$MNUFRAME[1,2]=mp[1]
+	--
+	--mp[1]=$MNUFRAME[3,1]
+	--mp[1].r=mp[1].r+Pang
+	--$MNUFRAME[3,2]=mp[1]
+	
+	--****************** Setting Y-offset to registers **************************
+	-- used in jumping
+	mp[1]=$MNUFRAME[1,1]
+	Set_RReg(466,mp[1].y)
+	
+	mp[1]=$MNUFRAME[3,1]
+	Set_RReg(467,mp[1].y)
+	
+
+EndLabel::
+
+--temp
+	--FOR i = 4  TO 17  DO
+				--TaskList1[i].enabled=FALSE
+				--TaskList3[i].enabled=FALSE
+	--ENDFOR
+	
+END Prof_Init
+

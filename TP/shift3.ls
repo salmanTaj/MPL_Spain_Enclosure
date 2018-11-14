@@ -1,0 +1,46 @@
+/PROG  SHIFT3
+/ATTR
+OWNER		= MNEDITOR;
+COMMENT		= "";
+PROG_SIZE	= 495;
+CREATE		= DATE 17-09-18  TIME 16:02:18;
+MODIFIED	= DATE 18-08-22  TIME 06:29:12;
+FILE_NAME	= SHIFT1;
+VERSION		= 0;
+LINE_COUNT	= 14;
+MEMORY_SIZE	= 959;
+PROTECT		= READ_WRITE;
+TCD:  STACK_SIZE	= 0,
+      TASK_PRIORITY	= 50,
+      TIME_SLICE	= 0,
+      BUSY_LAMP_OFF	= 0,
+      ABORT_REQUEST	= 0,
+      PAUSE_REQUEST	= 0;
+DEFAULT_GROUP	= *,*,1,*,*;
+CONTROL_CODE	= 00000000 00000000;
+/APPL
+  ARC : TRUE ; 
+  ARC Welding Equipment : *,1,*,*,*;
+
+MPAS ;
+MPAS_NUM_PASSES        : 0;
+MPAS_LAST_PASS         : 0;
+MPAS_CURRENT_PASS      : 0;
+MPAS_STATUS_PASS       : 0;
+/MN
+   1:  !-- AT RESUME JMP TO LABEL ;
+   2:  IF R[151]>0,JMP LBL[R[151]] ;
+   3:  R[179]=(-1)    ;
+   4:  PR[121]=JPOS    ;
+   5:   ;
+   6:  LBL[1] ;
+   7:  R[153]=1    ;
+   8:   ;
+   9:  CALL FOLD3    ;
+  10:  PR[120]=JPOS    ;
+  11:  PR[120,7]=PR[121,7]-300    ;
+  12:  PR[9,7]=PR[120,7]    ;
+  13:J PR[120] 16% FINE    ;
+  14:  CALL UNFOLD3    ;
+/POS
+/END

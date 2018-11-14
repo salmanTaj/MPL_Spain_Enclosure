@@ -1,0 +1,530 @@
+-- *********************************************************
+-- TASKMANAGER, Que_gen, Start, ResetAll
+--		       VARIABLES
+-- *********************************************************
+-- DIGITAL I/O external (sensing lasers)
+
+
+-- BOOLEANS
+AllErrMess		FROM TASKMAN:BOOLEAN			-- Used to debug, when this is 0 it will onlky popup 1 error
+BoolWS		FROM TASKMAN:BOOLEAN			-- Used only in weldstat routine
+ColdChk		FROM TASKMAN:BOOLEAN			-- Checking cooling system
+CondOK		FROM TASKMAN:BOOLEAN			-- Condition is true as long handshake to panel 
+ContTask		FROM TASKMAN:BOOLEAN			-- From pause task -> wish to continue that task
+--ErrorReq		FROM TASKMAN:BOOLEAN			-- Flag, when true - force stepmachine -> error Only Inrotech
+SysSound		FROM TASKMAN:BOOLEAN			-- Used while testing system, to enable/disable all sounds
+LogReq		FROM TASKMAN:BOOLEAN			-- Flag, used to trigger a system logning
+ManAut		FROM TASKMAN:BOOLEAN			-- Status - if we switched mode doing executing 
+RegBool		FROM TASKMAN:BOOLEAN			-- Returning bool from GetReg()
+CmdReset		FROM TASKMAN:BOOLEAN			-- Reset all command from Panel
+SkipJobs		FROM TASKMAN:BOOLEAN			-- Flag, when true - skipjob is executing
+TaskFlag		FROM TASKMAN:BOOLEAN			-- Flag used to keep track of TPFLAG
+TermiAct		FROM TASKMAN:BOOLEAN			-- Flag, terminate has been confirmed
+TPFlag			FROM TASKMAN:BOOLEAN			-- Flag, showing if tp is enabled or not
+ResponsB		FROM TASKMAN:BOOLEAN			-- Return repons on get_sys_var - welding on/off
+ResponsR		FROM TASKMAN:REAL				 --RETURN weld_dist IN mm (logning)
+RespsRWS  		FROM TASKMAN:REAL				-- RETURN value used IN weldstats ROUTINE	
+Pretask1, Pretask3	FROM TASKMAN:BOOLEAN		-- if task before was ended
+Scan_Heart FROM TASKMAN:INTEGER				-- heartbeat for SICK skanner
+Restart_pro FROM TASKMAN:BOOLEAN			-- to disable scanning in profile restart
+
+
+	
+StatTM			FROM TASKMAN:INTEGER			-- Status - function status reserved for Taskmanager
+
+
+
+-- INTEGERS
+Robot1, Robot3 FROM TASKMAN:INTEGER	 	-- Robot who has task active. 1 = should run, 2= running, 0= waiting
+attr_out			FROM TASKMAN:INTEGER			-- Get_Task_Status respons
+ColdTime		FROM TASKMAN:INTEGER			-- Used to delay check on water pressure
+CompTime		FROM TASKMAN:INTEGER			-- Tracker, comparing time for how long horn should be active
+DayOfW		FROM TASKMAN:INTEGER			-- Used for welding statistik, to make sure we are writing in right work shift
+Entry			FROM TASKMAN:INTEGER			-- System entry (logning)	
+EntryWS		FROM TASKMAN:INTEGER			-- System entry, only used in weldstats routine
+--ErrInt1       		FROM TASKMAN:INTEGER               	-- Returned error_code
+--ErrInt2       		FROM TASKMAN:INTEGER               	-- Returned cause_code
+--ErrInt3       		FROM TASKMAN:INTEGER               	-- Returned time when error_code was posted
+--ErrInt4       		FROM TASKMAN:INTEGER               	-- Returned severity (0=warning, 1=PAUSE, 2=ABORT)
+--ErrorNo			FROM TASKMAN:INTEGER			-- Status - used on internal errors, to get the correct message
+FromStat		FROM TASKMAN:INTEGER			-- Status - where did the error occour
+HourMin		FROM TASKMAN:INTEGER			-- Used for welding statistik, to make sure we are writing in right work shift
+--i			FROM TASKMAN:INTEGER			-- FOR statement counter
+
+LeftSide		FROM TASKMAN:INTEGER			-- Calculation variable (Que_gen)
+MonthDay		FROM TASKMAN:INTEGER			-- Used for welding statistik, to make sure we are writing in right work shift
+NrOfJobs		FROM TASKMAN:INTEGER			-- Status - how many jobs selected in the panel
+QStat			FROM TASKMAN:INTEGER			-- Status used in Que_gen
+RegInt			FROM TASKMAN:INTEGER			-- Returning integer from GetReg()
+ResponsI1		FROM TASKMAN:INTEGER			-- Used for Welding statistik respons from get sys var
+ResponsI2		FROM TASKMAN:INTEGER			-- Return arc_on_time in sec (logning)
+ResponsI3		FROM TASKMAN:INTEGER			-- Used for Welding statistik respons from get sys var
+ResponsI4		FROM TASKMAN:INTEGER			-- Used for Welding statistik respons from get sys var
+ResponsI5		FROM TASKMAN:INTEGER			-- Used for Welding statistik respons from get sys var
+RespsIWS		FROM TASKMAN:INTEGER			-- Used only in weldstats routine
+RightSide		FROM TASKMAN:INTEGER			-- Calculation variable (Que_gen)
+RG_Side		FROM TASKMAN:INTEGER			-- Wich side was selected in the panel
+SoundTime		FROM TASKMAN:INTEGER			-- Status, how long has the horn been active
+ShakeC		FROM TASKMAN:INTEGER		   	-- Keep track of connection with panel
+--State			FROM TASKMAN:INTEGER			-- Stepmachine State (old toplevel,lowlevel)
+StatST			FROM TASKMAN:INTEGER			-- Status used in Start
+TaskNr,Tasknr1, Tasknr3			FROM TASKMAN:INTEGER			-- Status - tasknumber
+Tasknr1Max, Tasknr3Max			FROM TASKMAN:INTEGER			-- Status - tasknumber
+TimeInt			FROM TASKMAN:INTEGER			-- Robot system current time
+Shift			FROM TASKMAN:INTEGER			-- Used only in weldstat routine, to check workshift
+
+StatWS			FROM TASKMAN:INTEGER			-- Status - only used in weldstats routine
+Web			FROM TASKMAN:INTEGER			-- Calculation variable (Que_gen)
+WeldDir		FROM TASKMAN:INTEGER			-- Wich direction was selected in the panel
+WebWeld		FROM TASKMAN:INTEGER			-- Web Welding Full or Partly
+safein_Start		FROM TASKMAN:BOOLEAN			-- for starting with safein	
+safein_R		FROM TASKMAN:INTEGER 			-- robots for special safein start	
+
+Day		FROM TASKMAN:INTEGER	
+
+ --REALS
+
+--WaterPres		FROM TASKMAN:REAL				 --Waterpressure	
+--WaterTemp	FROM TASKMAN:REAL				-- Watertemperatur
+
+-- STRINGS
+
+Empty			FROM TASKMAN:STRING[2]			-- Get_task_status respons
+--ErrStr1       		FROM TASKMAN:STRING[40]            	-- Error_string
+--ErrStr2    	   	FROM TASKMAN:STRING[40]            	-- Cause_string
+--ErrStr3    	   	FROM TASKMAN:STRING[12]         	-- Prog_name (not using this)
+LogStat		FROM TASKMAN:STRING[20]			-- Systemlogning - this is the entry string
+RegS			FROM TASKMAN:STRING[10]			-- Returning string from GetReg()	
+TaskName, TaskName1,TaskName3  	FROM TASKMAN:STRING[12]			-- Taskname
+TimeS			FROM TASKMAN:STRING[20]			-- Robot system current time (int converted)		
+
+ 
+-- TYPES
+--Panel			FROM TASKMAN:Panel_type					-- Signals from Panel
+TaskList		FROM TASKMAN:ARRAY[30] OF Task_Type	-- Generated tasklist
+TaskList1		FROM TASKMAN:ARRAY[35] OF Task_Type	-- Generated tasklist
+TaskList3		FROM TASKMAN:ARRAY[35] OF Task_Type	-- Generated tasklist
+
+-- FILES
+LogFile       		FROM TASKMAN:FILE                  		-- Error logging file
+ErrFile			FROM TASKMAN:FILE					-- Missing error text
+
+--TEST
+--Rnd			FROM TASKMAN:INTEGER
+--Rnd2			FROM TASKMAN:INTEGER
+--Rnd3			FROM TASKMAN:INTEGER
+--Rnd4			FROM TASKMAN:INTEGER
+--rndreal			FROM TASKMAN:REAL
+--rndbool		FROM TASKMAN:BOOLEAN
+--RndS			FROM TASKMAN:STRING[10]
+--RndS2			FROM TASKMAN:STRING[10]
+
+-- *********************************************************
+-- Rotate, nxtpos, Terminate
+--		       VARIABLES
+-- *********************************************************
+-- INTEGERS
+--StatRot			FROM TASKMAN:INTEGER			-- Status Rotate
+--StatTerm		FROM TASKMAN:INTEGER			-- Status Terminate 
+
+-- *********************************************************
+-- INROTECH, GROUP 1-6, Knee, Motion
+--		       VARIABLES
+-- *********************************************************
+-- BOOLEANS
+--AnSearch      		FROM TASKMAN:BOOLEAN			-- analog søgning i stedet for digital
+--BoolIn				FROM TASKMAN:BOOLEAN
+--Bool_Tmp 	    	FROM TASKMAN:BOOLEAN			-- used in get_reg function (knee)
+--BulbSide  	    		FROM TASKMAN:BOOLEAN 			-- result of sensing, bulbside or not
+--ChkArcSens		FROM TASKMAN:BOOLEAN			-- In_mon, checking flag for arc sensor fljo
+--CoolingOn			FROM TASKMAN:BOOLEAN			-- In_mon, aftercooling flag
+--Ext_Mid_Corr  	FROM TASKMAN:BOOLEAN              	-- positions korrektion af ekstern akse J/N
+--ExtrWPs			FROM TASKMAN:BOOLEAN
+--Flag1         		FROM TASKMAN:BOOLEAN -- not used anymore
+--InMonB				FROM TASKMAN:BOOLEAN			-- Get_reg answer in in_mon
+--Knee_Point		FROM TASKMAN:BOOLEAN			-- Does cutout in feature affect top WP in knee?
+--Knee_Present 	FROM TASKMAN:BOOLEAN			-- Result of sening, Knee found
+--			-- Sensing succeded
+--PK_Present		FROM TASKMAN:BOOLEAN			-- Collar plate found doing sensing
+--Recalc_Pos    	FROM TASKMAN:BOOLEAN                	-- if position is not reachable, recalc allowed
+
+			
+--SideSelect			FROM TASKMAN:BOOLEAN			-- TRUE = Green
+--Stiffener			FROM TASKMAN:BOOLEAN			-- Stiffener detected doing sensing
+--WeldDone			FROM TASKMAN:BOOLEAN			-- in_Mon, flag to start aftercool
+
+-- INTEGERS
+
+--Cor_val      		FROM TASKMAN:INTEGER                	-- amount of times we corrected value if pos to far away
+--GroupNr		FROM TASKMAN:INTEGER			-- Result of sensing
+--IntInr			FROM TASKMAN:INTEGER			-- Calculation variable 
+--IntInr1			FROM TASKMAN:INTEGER			-- Calculation variable 
+--Int_Tmp       	FROM TASKMAN:INTEGER			-- used in get_reg function (knee)
+--IntVal1       		FROM TASKMAN:INTEGER
+--InMonI			FROM TASKMAN:INTEGER			-- Get_reg answer in in_mon
+--iS            		FROM TASKMAN:INTEGER
+--j      			FROM TASKMAN:INTEGER
+--q				FROM TASKMAN:INTEGER
+
+--Parm2         	FROM TASKMAN:INTEGER				
+--Parm3         	FROM TASKMAN:INTEGER	
+--Parm3L        	FROM TASKMAN:INTEGER	
+--Parm3R      	FROM TASKMAN:INTEGER
+--Recalc_Dir    	FROM TASKMAN:INTEGER                	-- tels which directions can be recalculated
+			-- Defining robot sensing speed
+--SimpleSens    	FROM TASKMAN:INTEGER			-- Used to test sensing at meyer, since they always have same type (almost)
+--StatCnt       		FROM TASKMAN:INTEGER
+--StatIm			FROM TASKMAN:INTEGER			-- In_mon status
+--StatIN			FROM TASKMAN:INTEGER			-- Inrotech and group Status
+--StatKnee		FROM TASKMAN:INTEGER			-- Knee status
+
+--TastArrCnt    	FROM TASKMAN:INTEGER			-- In_mon
+
+--Web_Thick		FROM TASKMAN:INTEGER			-- Calculation variable
+--WeldErrCnt		FROM TASKMAN:INTEGER			-- Used in in_mon
+
+-- REALS
+--ActSysAng6   	FROM TASKMAN:REAL
+--Afstand			FROM TASKMAN:REAL				-- Used to calculated the angle of stiffener
+
+--BH				FROM TASKMAN:REAL				-- Width of scalap 
+--BR				FROM TASKMAN:REAL				-- Radius buttom
+--BulbWidth			FROM TASKMAN:REAL				-- Radius buttom
+--ChkMinVal		FROM TASKMAN:REAL   				-- Mindste værdi målt fra sidste sensing
+--CompaFac		FROM TASKMAN:REAL				-- in_mon, comparing factor for delay in aftercooling 
+--CoolTime		FROM TASKMAN:REAL				-- in_mon, aftercooling time
+--EXT_Akse		FROM TASKMAN:REAL
+--Ext_PosCorr   	FROM TASKMAN:REAL
+--FW_Act        	FROM TASKMAN:REAL                 		-- Actual Face Width 
+--HC				FROM TASKMAN:REAL				-- Height of clips
+--HaeldTal		FROM TASKMAN:REAL				-- Used to calculated the angle of stiffener
+--InMonR       	FROM TASKMAN:REAL				-- Get_reg answer in in_mon
+--Inclination		FROM TASKMAN:REAL				-- Used to calculated the angle of stiffener
+--JobWidth      	FROM TASKMAN:REAL 				-- Result of position and sensing
+--Katet1        		FROM TASKMAN:REAL				-- Used to calculated the angle of stiffener
+--Katet2        		FROM TASKMAN:REAL				-- Used to calculated the angle of stiffener
+--Knee_W_Limit FROM TASKMAN:REAL
+--MaxOffs     		FROM TASKMAN:REAL				-- In_mon
+--LocalR		FROM TASKMAN:REAL				-- Profil kant 'radius' (analog sensing )
+--ProfilTop	FROM TASKMAN:REAL                  -- overkanten af profil 
+--PosCorr       	FROM TASKMAN:REAL
+--corr_val       	FROM TASKMAN:REAL		-- fljo calculated correction of the Y-position of the internal axis
+--R1            		FROM TASKMAN:REAL
+--R2            		FROM TASKMAN:REAL
+--RealInr			FROM TASKMAN:REAL	
+--Real_Tmp      	FROM TASKMAN:REAL				-- used in get_reg function (knee)
+
+--StifDist			FROM TASKMAN:REAL				-- Used to calculated the angle of stiffener
+--Stiff1			FROM TASKMAN:REAL				-- Used to calculated the angle of stiffener
+--Stiff2			FROM TASKMAN:REAL				-- Used to calculated the angle of stiffener
+--TastMaxCorr   	FROM TASKMAN:REAL				-- In_mon
+--TimeDiff		FROM TASKMAN:REAL				-- In_mon timediff since started aftercooling
+TP_parmReal 	FROM TASKMAN:REAL
+
+Axis6RotID    	FROM TASKMAN:INTEGER
+--TR				FROM TASKMAN:REAL				-- Radius top
+--TrekP        		FROM TASKMAN:REAL				-- Used to calculated the angle of stiffener
+--UdKapRad      	FROM TASKMAN:REAL                   		-- Udkap radius (beregnet ud fra profil type + højde)
+--Web_Knee      	FROM TASKMAN:REAL                  		-- X-værdi af webben ved knæet (så godt vi kan)
+--Web_X         	FROM TASKMAN:REAL                   		-- X-værdi taget i midten af jobbet
+--WeldSpc       	FROM TASKMAN:REAL
+--Y_PosCorr     	FROM TASKMAN:REAL
+--
+-- STRINGS
+TP_parm_Str	FROM MPL_vars:STRING[12]		
+Tik          	 FROM MPL_vars:INTEGER
+TP_parm_Int 	FROM TASKMAN:INTEGER
+
+-- ARRAYS
+AngCalcAry    	FROM MPL_vars:ARRAY[6,7] OF INTEGER
+EvalArr       		FROM MPL_vars:ARRAY[6] OF INTEGER
+extjnt        		FROM MPL_vars:ARRAY[3] OF REAL
+--FeatNr        		FROM MPL_vars:ARRAY[3] OF INTEGER		--1,0,-1 (side calculation)
+JntArr1       		FROM MPL_vars:ARRAY[9] OF REAL
+JntArr2       		FROM MPL_vars:ARRAY[9] OF REAL
+PG_Names   	FROM MPL_vars:ARRAY[2] OF STRING[8]
+SelPos        	FROM MPL_vars:ARRAY[6] OF JOINTPOS
+SensArr       	FROM MPL_vars:ARRAY[9] OF REAL		
+
+MP				FROM MPL_vars:ARRAY[30] OF XYZWPREXT-- Sensing points
+S				FROM MPL_vars:ARRAY[30] OF REAL		-- Sensing values
+
+-- VECTORS
+Dir           		FROM MPL_vars:VECTOR
+Retur			FROM MPL_vars:VECTOR
+
+-- CONFIGS
+CNFG          	FROM MPL_vars:CONFIG
+Conf1         	FROM MPL_vars:CONFIG
+
+-- XYZWPREXT
+ActPkt       		FROM MPL_vars:XYZWPREXT
+CalcPos		FROM MPL_vars:XYZWPREXT			-- Calculated position
+CurrentPos		FROM MPL_vars:XYZWPREXT			-- Robot's current position
+GotPoint      	FROM MPL_vars:XYZWPREXT
+Pos_Fra       	FROM MPL_vars:XYZWPREXT 
+Pos_Til       		FROM MPL_vars:XYZWPREXT 
+SensTarget    	FROM MPL_vars:XYZWPREXT 
+Src_Begin     	FROM MPL_vars:XYZWPREXT
+Src_Return    	FROM MPL_vars:XYZWPREXT
+Src_Target    	FROM MPL_vars:XYZWPREXT
+StartPkt      		FROM MPL_vars:XYZWPREXT
+TouchPoint    	FROM MPL_vars:XYZWPREXT
+
+-- Sensing 
+MoveSpeed		FROM MPL_vars :INTEGER			
+MoveAccel     		FROM MPL_vars :INTEGER
+SensAccel     	FROM MPL_vars:INTEGER
+SensSpeed		FROM MPL_vars:INTEGER
+Ana_Result	FROM MPL_vars:REAL				-- Resultat af analog sensning
+Search_Sig    	FROM MPL_vars:BOOLEAN
+Sens_Diff 		FROM MPL_vars:REAL				-- margin for analog sensings udslag
+SensVal       	FROM MPL_vars:REAL                   		-- Return value from sensning
+SensWeb       		FROM MPL_vars:BOOLEAN
+
+JobNo			FROM TASKMAN:INTEGER			-- Status - jobnumber	
+
+-- JOINTPOS
+J_Pos1        	FROM MPL_vars:JOINTPOS
+J_Pos2        	FROM MPL_vars:JOINTPOS
+JPosTest      	FROM MPL_vars:JOINTPOS              
+JPos_Test     	FROM MPL_vars:JOINTPOS
+--JPos_1			FROM MPL_vars:JOINTPOS IN GROUP[1]
+--JPos_3			FROM MPL_vars:JOINTPOS IN GROUP[3]
+
+
+An_Mid_Val	FROM MPL_vars:REAL	-- kommer fra Analaser og bruges i Inrotech  fljo
+
+-- VARIABLES FOR OSHIMA-MOCKUP MESSE-ROBOT
+--Stat1        	FROM MPL_vars :INTEGER
+--SensSig       	FROM MPL_vars :INTEGER
+--ERROR_Nr    	FROM MPL_vars :INTEGER
+--LaserOpen     	FROM MPL_vars :INTEGER
+--ErrReq      	FROM MPL_vars :BOOLEAN
+--Right_Y_Val  	FROM MPL_vars :REAL
+--Left_Y_Val    	FROM MPL_vars :REAL
+--Profile_Incl  	FROM MPL_vars :REAL
+--Z_HGT         	FROM MPL_vars :REAL
+--FWL           	FROM MPL_vars :REAL                   -- Face Width Left
+--FWR           	FROM MPL_vars :REAL                   -- Face Width Right
+--StifSens      	FROM MPL_vars :REAL
+--Stat          	FROM MPL_vars :INTEGER
+--TP_parm_Real  FROM MPL_vars :REAL
+--NoOfJobs     	FROM MPL_vars :INTEGER
+--Bracket_Incl  	FROM MPL_vars :REAL
+
+
+--RAFA: FOR initpos direction
+sens1 	FROM MPL_vars: INTEGER
+sens3	FROM MPL_vars: INTEGER
+firstsens FROM MPL_vars: INTEGER
+secondsens FROM MPL_vars: INTEGER
+storesens FROM MPL_vars: INTEGER
+
+--RAFA Ny funklib
+Step		FROM MPL_vars:ARRAY[150] OF Step_Type
+ProBulb, Probulb1, probulb3	FROM MPL_vars: INTEGER
+--ProHei, ProHei1, ProHei3	FROM MPL_vars: INTEGER
+ProY, ProY1, ProY3		FROM MPL_vars: REAL
+ProX, ProX1, ProX3		FROM MPL_vars: REAL
+ProZ, ProZ1, ProZ3 		FROM MPL_vars: REAL
+Zbase	FROM MPL_vars: REAL
+ProE, ProE1, ProE3, ProS, ProS1, ProS3			FROM MPL_vars: REAL
+ProWS, ProWS1, ProWS3 FROM MPL_vars: REAL -- web side
+ProWE, ProWE1, ProWE3 FROM MPL_vars: REAL -- web end
+E_offs, S_offs					 FROM MPL_vars: REAL
+ProEnd1,ProEnd2		 FROM MPL_vars: integer --ends from skanning
+
+ToolP,ToolZ	FROM  MPL_vars: REAL-- for sensning in Tool
+Tool_dir 		FROM  MPL_vars: INTEGER-- to get x,y of z in tool sensing
+MinThick 	FROM MPL_vars: REAL
+Side12 	FROM MPL_vars: INTEGER
+Laser1		FROM MPL_vars: REAL
+Laser2		FROM MPL_vars: REAL
+SensR1	FROM MPL_vars: REAL
+SensR2	FROM MPL_vars: REAL
+RL_side	FROM MPL_vars: INTEGER
+MidL		FROM MPL_vars: INTEGER
+MidR		FROM MPL_vars: INTEGER
+
+
+--RAFA anLa_ny
+
+edge_type  	FROM MPL_vars: STRING[5]
+FindDiff	 FROM  MPL_vars: REAL
+anadiff		FROM  MPL_vars: REAL
+AnaPoint	FROM MPL_vars: XYZWPREXT-- Sensing points
+string_tmp 	FROM	MPL_vars: STRING[3]
+mir		FROM  MPL_vars: BOOLEAN
+mir_off FROM  MPL_vars: BOOLEAN
+mir_short FROM  MPL_vars: BOOLEAN -- disable mirror short
+mir_long FROM  MPL_vars: BOOLEAN -- disable mirror long
+Min_dis FROM  MPL_vars: REAL
+
+--Rafa inrotech
+SO		FROM MPL_vars: INTEGER
+SC		FROM MPL_vars: INTEGER
+ST	 	FROM MPL_vars: INTEGER
+Featnr	 	FROM MPL_vars: INTEGER
+FeatnrL	 FROM MPL_vars: INTEGER
+FeatnrR	 FROM MPL_vars: INTEGER
+KneeNr	 FROM MPL_vars: INTEGER
+Actstep 	FROM MPL_vars: INTEGER
+actsensing	FROM MPL_vars: STRING[40]
+ProCross	FROM	MPL_vars:BOOLEAN
+
+
+--O_RFCP	FROM MPL_vars:INTEGER			-- R Front CP
+--O_RCor		FROM MPL_vars:INTEGER		-- R Close Corner
+--O_RBCP	FROM MPL_vars:INTEGER			--  R Back CP		
+--O_RClWe	FROM MPL_vars:INTEGER			-- R close web
+--O_RClSC	FROM MPL_vars:INTEGER			-- R close Scallop
+--O_RClGi	FROM MPL_vars:INTEGER			-- R close Girder
+--O_LFCP	FROM MPL_vars:INTEGER		-- L Front CP
+--O_LCor		FROM MPL_vars:INTEGER		-- LClose Corner
+--O_LBCP	FROM MPL_vars:INTEGER		-- L Back CP		
+--O_LClWe	FROM MPL_vars:INTEGER			-- L close web
+--O_LClSC	FROM MPL_vars:INTEGER			-- L close Scallop
+--O_LClGi	FROM MPL_vars:INTEGER			-- L close Girder
+
+
+--Sense Checks
+--Checks		FROM SensChk:ARRAY[150] OF Check_type
+--Compa		FROM SensChk:ARRAY[150] OF Comp_type
+--results 		FROM SensChk:ARRAY[10] OF INTEGER
+
+--GeoLib
+--Geo_Scallop		FROM MPL_vars: REAL
+--Geo_CutRadi		FROM MPL_vars: REAL
+--Geo_NWT_CPH	FROM MPL_vars: REAL
+--Geo_NWT_CPW	FROM MPL_vars: REAL
+--Geo_WT_CPH		FROM MPL_vars: REAL
+--Geo_WT_CPW		FROM MPL_vars: REAL
+ 
+
+
+--MPL_vars
+Dx,Dy,DT, PangPos,Pang,Pang2 FROM MPL_vars: REAL
+ PDx,PDy,PDT,PLeng FROM MPL_vars: REAL
+ TP_step, KL_step, KL_stepN, KL_stepP, X_dir,Y_dir, XY_dir FROM MPL_vars: INTEGER
+ X_limit, X_diff, X_off, X_flag FROM MPL_vars: REAL
+ Dist,dist2 FROM MPL_vars: REAL
+X_start, X_end, Y_start, Y_end, X_gantry  FROM MPL_vars: REAL
+Robot,statmpl FROM MPL_vars: INTEGER
+ 
+ -- welding
+ON_dis,OFF_dis,  Cross_dis,Start_dis,Weld_step, Lap,Robot_dis FROM MPL_vars: REAL -- 
+End_point FROM MPL_vars: REAL
+Cross_num,cross_cnt, Cross_Robot, weld_off FROM MPL_vars: INTEGER
+Cross_num1,parts_num1,parts_cnt1, Cross_num3, parts_num3, parts_cnt3  FROM MPL_vars: INTEGER
+
+
+--Cross_X, Cross_Y, Cross_R FROM MPL_vars: REAL
+
+Done 	FROM	MPL_vars:BOOLEAN
+Cross FROM MPL_vars: ARRAY[15] OF crosses
+Parts1 FROM MPL_vars: ARRAY[10] OF Part
+Parts3 FROM MPL_vars: ARRAY[10] OF Part
+Profile FROM MPL_vars: ARRAY[30] OF Profiles
+--Cross    	FROM MPL_vars:XYZWPRE
+
+
+-- Sensing
+XY FROM MPL_vars: INTEGER-- XY direction X=1, Y=0
+SE FROM MPL_vars: INTEGER -- start/end Start=-1, end = 1
+RD FROM MPL_vars: INTEGER -- Robot 1=1, 3=-1
+X_offs, Y_offs  FROM MPL_vars: REAL -- offset for X and Y depending on robot and direction
+S_dir FROM MPL_vars: INTEGER -- Sens direction
+A_dir FROM MPL_vars: INTEGER -- Sens direction for Analog sensing
+F_dir FROM MPL_vars: INTEGER -- factor dir for offset
+Pro_num  FROM MPL_vars: INTEGER
+Pro_max FROM MPL_vars: INTEGER
+low_mirror FROM MPL_vars: INTEGER
+
+Profile_type,OPro_type FROM MPL_vars: INTEGER -- profile type
+flange, Flange1, Flange3, OPro_Flange ,OPro_Flange1 ,OPro_Flange3 FROM MPL_vars: INTEGER -- flange type
+FlangeW,FlangeW1,FlangeW3  FROM MPL_vars: REAL -- flange profile
+FlangeSW,FlangeSW1,FlangeSW3  FROM MPL_vars: REAL -- flange profile
+--FlangeSW,FlangeSR,FlangeSO  FROM MPL_vars: REAL -- flange side profile
+FLP11,FLP12,FLP21,FLP22  FROM MPL_vars: REAL -- Profile flange
+SFL1R,SFL1O,SFL2R,SFL2O  FROM MPL_vars: REAL -- Side profile flange
+SFL1, SFL2 FROM MPL_vars: REAL -- Side profile flange
+STop1,STOP2  FROM MPL_vars: REAL
+SideP1, sideP2, SideP FROM MPL_vars: Integer
+ProHei, Prohei1, Prohei3, OProhei, OProHei1, OProHei3 FROM MPL_vars: REAL -- profile Heigth
+end_type, end_type1, end_type3 FROM MPL_vars: INTEGER -- profile end type
+PF_Low, PF_Low1, PF_Low3 FROM MPL_vars: INTEGER -- upper type
+PF_high,PF_high1,PF_high3 FROM MPL_vars: INTEGER -- lower type
+web_type, web_type1, web_type3 FROM MPL_vars: INTEGER -- web type
+Low_ang1,low_ang3 FROM MPL_vars: INTEGER -- Low T or L profile, change torch angle
+Low_angS1,low_angS3 FROM MPL_vars: INTEGER -- Low angle for side profile
+Max_CHigh FROM MPL_vars: REAL -- max crossing heigth
+ExtOffset,Extoffset1,extoffset3,extoffset2  FROM MPL_vars: REAL -- offset on external axis at sensning
+MoveX FROM MPL_vars: INTEGER -- if gantry should be moved
+Sensback FROM MPL_vars: BOOLEAN
+  ProE_tmp, ProS_tmp FROM MPL_vars: REAL
+  tmpZ From MPL_vars: REAL
+
+swap_end FROM MPL_vars: BOOLEAN
+Swap_back FROM MPL_vars: BOOLEAN
+
+Short_prof FROM MPL_vars: BOOLEAN
+swap_Robot FROM MPL_vars: INTEGER
+swap_R_START FROM MPL_vars: INTEGER
+swap_R_END FROM MPL_vars: integer
+act_sideL, act_sideL1,act_sideL3 FROM MPL_vars: REAL
+--angles
+w_angle,p_angle,r_angle, r_ang_sto FROM MPL_vars: REAL
+
+-- starting POSITION FOR gantry FOR jump 
+-- if profiles in X dir
+
+
+ThickPro FROM MPL_vars: REAL
+
+SkipEnd FROM MPL_vars: BOOLEAN
+Skipprof FROM MPL_vars: BOOLEAN
+SkipEndBut FROM MPL_vars: BOOLEAN
+skipEndMove FROM MPL_vars: BOOLEAN
+midweld FROM MPL_vars: BOOLEAN
+ShortEnd FROM MPL_vars: INTEGER
+endPlock FROM MPL_vars: BOOLEAN -- endpoint has been calculated and store in PR11
+
+
+--WB_act, WB_Start,WB_end,WB_Start1,WB_Start3,WB_End1,WB_End3 FROM MPL_vars: REAL
+Free_dis FROM MPL_vars: REAL
+
+dir_store FROM MPL_vars: INTEGER
+
+Sens_Pos	FROM Funktlib: Pos_Chk
+
+-- project specifik things
+Narrow_edge FROM MPL_vars: BOOLEAN -- very narrow edge
+OverLap FROM MPL_vars: BOOLEAN -- overlapping profile
+small_Scal FROM MPL_vars: BOOLEAN
+Var_Heigth FROM MPL_vars: BOOLEAN -- variating heigth
+No_hei_sens FROM MPL_vars: BOOLEAN -- no sensing of heigth
+no_PF FROM MPL_vars: BOOLEAN -- no PF welding
+
+
+
+-- directions for web sensing
+	XY_tmp, X_tmp, Y_tmp,RD_tmp,SE_tmp FROM MPL_vars: INTEGER	
+	
+-- neighbour Check
+-- 0 = None
+--1 = present
+-- 10 = close NB
+--NB_side FROM MPL_vars: INTEGER
+NB_back, NB_back1, NB_back3 FROM MPL_vars: INTEGER 
+NB_side, NB_side1, NB_side3 FROM MPL_vars: INTEGER 
+Dist_NextX1, Dist_NextX3 FROM MPL_vars: REAL 
+
+
+-- new weld back variables
+Endpos_R1, endpos_R3 FROM MPL_vars: REAL 
+
+JumpStart FROM MPL_vars: REAL 
+--disX_start, disX_end FROM MPL_vars: BOOLEAN -- if X end or start should be disabled
+dis_start, dis_end FROM MPL_vars: INTEGER -- if end or start should be disabled 1,3,4
+Down_999: INTEGER -- is robots down in step 999

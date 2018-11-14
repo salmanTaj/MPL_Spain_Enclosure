@@ -1,0 +1,318 @@
+PROGRAM AnLa_ny
+	%NOLOCKGROUP
+	%NOPAUSESHFT
+	%NOPAUSE = ERROR + TPENABLE + COMMAND
+	
+TYPE
+%INCLUDE Types
+
+
+VAR
+	%INCLUDE Gvars
+	%INCLUDE MPL_vars
+
+--counters
+con_Cnt, long_cnt, short_Cnt 	: INTEGER
+
+-- Long Long_Arrayay
+Long_avg 			: REAL
+Long_sum			: REAL
+Long_Array			: ARRAY[55] OF REAL
+
+-- Short Long_Arrayay
+Short_avg, Short_sum		: REAL
+Short_Array			: ARRAY[6] OF REAL
+
+AnVal				: REAL
+anraw				: REAL
+
+--edge_type			FROM AnLa_ny: STRING[10]
+
+
+DelayT				: REAL
+abs_diff			: REAL
+i				:INTEGER -- loop counter	
+mir_cnt			:INTEGER	-- counts number of reflections
+anval2			:REAL	
+
+--Result			FROM AnLa_ny: REAL
+
+CONST
+Long_Start = 8 -- delay before start og long array
+Long_max = 10 -- max Long_Arrayay meassures -- reduced to 10 2016-10-13 because of skæv plade	
+Short_max = 2 -- max check meassures -- skal være min 2 ellers kan der gives fejl skal
+
+
+ROUTINE Loop_AL FROM AnLa_ny
+ROUTINE Start_AL FROM AnLa_ny
+ROUTINE ReadLaser : REAL FROM AnLa_ny
+
+-- ********************************************************************
+ROUTINE Start_AL -- is started from Motion, when AnSearch = TRUE... Starts the analaser loop routine
+-- ********************************************************************
+
+BEGIN
+	
+	DISABLE CONDITION[1] -- Disables any old conditions that might be active
+	
+	---- sets all counters to 0 ----
+	con_cnt = 0
+	Long_cnt = 0
+	Short_cnt = 0
+	mir_cnt=0
+	
+	Long_sum = 0
+	Short_sum = 0
+	
+	long_avg=0
+	short_avg=0
+	
+	Ana_Result = 0
+	
+	mir = FALSE
+	
+	FOR i = 1 TO Long_max DO
+		Long_Array[i]=0	
+	ENDFOR
+	
+	FOR i = 1 TO short_max DO
+		short_Array[i]=0	
+	ENDFOR
+	
+
+--////////////////////////// ----- Size of the edge----- ////////////////
+
+	
+	edge_type	= 'Flush' -- overwritten later if edge are found
+	--DELAY 100 -- to make sure robot is stopped from other motion.
+	
+		
+--///////////////// sets conditions. Used TO run Loop_AL during sensing /////////////////////////////////////	
+		
+	PURGE CONDITION[1]	-- purges any old conditinos
+		
+	CONDITION[1]: WITH $SCAN_TIME = 16-- må ikke være så lav at  den når at genstarte.. igen
+	
+	WHEN Ana_Result=0 DO Loop_AL -- starts Loop_AL  one time
+	  
+	ENDCONDITION  
+
+	ENABLE CONDITION[1] 
+		
+END Start_AL	
+
+-- ******************************************************************** 
+ROUTINE Loop_AL
+-- ********************************************************************
+---- this routine has 2 Long_Arrayays
+---- "Short_array" that holds the last "Short_max" meassures and are in front of long array
+---- "Long_Array" holds the previous meassures from "Short_max" to "Long_max"
+
+--- first both Arrays are filled up. short first, then long
+--- then the loop starts and Long_Arrays are overwritten
+--- sum and average are found
+--- average between the 2 Arrays are compared
+
+
+
+BEGIN
+
+	ENABLE CONDITION[1] -- to start Loop_AL one more time if needed
+		
+	-- adds up counters	
+	con_cnt = con_cnt +1 -- continues counter
+	Long_cnt = Long_cnt +1 -- Long_Arrayay counter
+	Short_cnt = Short_cnt + 1 -- check Long_Arrayay counter
+	
+	
+------------- reset counters
+	
+	IF con_cnt <= Short_max+1 THEN -- Long  counter does not start before Short_Array is filled up
+		Long_cnt = 1
+	ENDIF
+			
+	IF Long_cnt > Long_max  THEN	-- Long_Arrayay counter reset if max
+		Long_cnt = 1
+	ENDIF
+	
+	IF Short_cnt > Short_max THEN -- 	Short counter reset if max
+		Short_cnt = 1
+	ENDIF
+	
+-------------- retract old values from arrays before new are added
+
+	IF con_cnt  > Long_max + Short_max THEN 	-- only if Long_Array is filled up
+		Long_sum = Long_sum - Long_Array[Long_cnt]
+	ENDIF
+	
+	IF con_cnt > Short_max THEN 						-- only if Short_array is filled up
+		Short_sum = Short_sum - Short_Array[Short_cnt]
+	ENDIF
+	
+	
+-------------- get value from laser
+	AnVal = (AIN[IA_Slaser]/66.02)-49.137
+	AnVal2 = (AIN[IA_Slaser]/66.02)-49.137
+	anraw=AIN[IA_Slaser]
+	
+	IF AIN[IA_Slaser] <4200 THEN-- if  laser is out of range
+	
+		IF ((mir_cnt=con_cnt-1) AND (mir_long=FALSE)) THEN -- will only enter here if mir happens 2 IN a row
+			anval = 450
+			mir = TRUE -- mirror effect
+		else
+			anval = Short_Array[Short_cnt]
+		ENDIF
+		mir_cnt=con_cnt
+		
+		-- overrule if long array is not filled up
+		IF con_cnt  < Long_max + Short_max THEN 
+			anval = Short_Array[Short_cnt]
+		ENDIF
+			
+	ENDIF
+	
+	IF (AIN[IA_Slaser] <10000) AND (AIN[IA_Slaser] > 4200)  THEN-- if  laser has mirror
+		-- then use last value
+		anval = Short_Array[Short_cnt]
+	ENDIF
+	
+	-- mirror off
+	IF (AIN[IA_Slaser] <18000) AND (mir_short=TRUE)  THEN-- if  laser has mirror
+		-- then use last value
+		anval = Short_Array[Short_cnt]
+	ENDIF
+	
+	
+
+IF ((anval<>0)) THEN 
+	
+
+	--------------- write value to Long_Array
+		IF con_cnt > Short_max THEN -- Long_Arrayay counter does not start before chk Long_Arrayay is filled up
+				Long_Array[Long_cnt] = Short_Array[Short_cnt] -- writes old Short_Long_Arrayay value to Long_Array
+							
+			--ENDIF
+			Long_sum = (Long_sum + Long_Array[Long_cnt])
+	
+		ENDIF
+		
+	-------------- write value to Short_Array
+		Short_Array[Short_cnt] = anval
+		Short_sum = Short_sum + Short_Array[Short_cnt]
+		
+				
+	-------------- average 
+		Long_avg = Long_sum / Long_max
+		Short_avg = Short_sum/Short_max
+			
+		IF (con_cnt < Long_max+Short_max) AND  (con_cnt > Short_max) THEN -- average if long Array  is not filled up yet
+			Long_avg = Long_sum / (con_cnt-Short_max)
+		ENDIF
+
+else
+	con_cnt = con_cnt -1 -- continues counter
+	Long_cnt = Long_cnt -1 -- Long_Arrayay counter
+	Short_cnt = Short_cnt - 1 -- check Long_Arrayay counter
+	
+	IF con_cnt<1 THEN 
+		con_cnt=1
+	ENDIF
+	IF con_cnt<1 THEN 
+		con_cnt=1
+	ENDIF
+	
+	IF long_cnt<1 THEN 
+		long_cnt=1
+	ENDIF
+	
+	IF short_cnt<1 THEN 
+		short_cnt=1
+	ENDIF
+	
+	IF ((anval=0) AND (con_cnt>5)) THEN 
+		errorreq=TRUE
+		ABORT
+	ENDIF
+
+endif
+
+--------------- ///   checks and stop loop if  needed    ////////////////////////////
+	
+	IF con_cnt > Long_Start THEN  -- only checks if minimum measures are done
+		
+	IF ((ABS(long_avg-short_Array[1])>finddiff) AND (ABS(long_avg-short_Array[2])>finddiff)) THEN -- check
+		
+		min_dis=Short_avg-- mininum distance logged
+		
+		anadiff = Long_avg - Short_avg  -- difference
+		
+		-- absolut difference
+		abs_diff = ABS(anadiff)
+		
+				
+		--- check and set edge types:
+		IF (abs_diff > finddiff) AND (anadiff > 0) THEN
+			edge_type	= 'Front'
+			Ana_Result = 1 
+			
+			
+		ENDIF	 
+		
+		IF (abs_diff > finddiff) AND (anadiff< 0) THEN
+			edge_type	= 'Back'
+			Ana_Result = 1 
+			
+						
+		ENDIF
+		
+		IF (abs_diff > finddiff) AND (anadiff < (-20)) THEN
+			edge_type	= 'Gap'
+			Ana_Result = 1 
+			
+		ENDIF
+		
+		-- STOP IF result is found		
+		IF ana_result = 1 THEN
+			anapoint=CURPOS(0,0)
+			DISABLE CONDITION[1]
+			mir_off=FALSE -- resetting
+			mir_short=FALSE -- resetting
+			mir_long=FALSE -- resetting
+		ENDIF			
+	endif			
+		
+	ENDIF
+	--PAUSE
+		
+END Loop_AL
+
+-- ******************************************************************** 
+ROUTINE ReadLaser
+-- ********************************************************************
+BEGIN
+
+IF AIN[IA_Slaser] <12250 THEN
+DELAY 500	--extra check 2017-03-01
+
+	IF AIN[IA_Slaser] <12250 THEN-- if  laser is out of range  = 12250 end of black ring on torch 
+			RETURN (450)
+	else 
+		RETURN((AIN[IA_Slaser]/66.02)-49.137)
+	ENDIF
+else 
+	RETURN((AIN[IA_Slaser]/66.02)-49.137)	
+
+ENDIF
+
+END ReadLaser
+
+-- ********************************************************************
+ --AnLa_ny
+-- ********************************************************************
+BEGIN
+
+-- empty program. we only use the routines
+
+END AnLa_ny
+

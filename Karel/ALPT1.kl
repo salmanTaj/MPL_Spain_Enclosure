@@ -1,0 +1,2719 @@
+
+-- -- -- -- --     ALPT1      -- -- -- -- --
+-----------------------------------------------------------------------------------------
+PROGRAM ALPT1
+	%NOPAUSESHFT
+	%NOPAUSE = ERROR + TPENABLE
+	%NOABORT = ERROR 
+	%NOLOCKGROUP
+
+TYPE
+	%INCLUDE Types
+
+VAR
+	%INCLUDE Gvars
+	%INCLUDE MPL_vars
+	
+	Real_tmp,Real_tmp2	:REAL
+	real_int		:INTEGER
+	real_local	: REAL
+	int_tmp		:INTEGER
+	StatIN		:INTEGER
+	i		:Integer -- loop counter
+	Dag, maaned  :INTEGER
+  	filnavn1 FROM TASKMAN:STRING[18]
+  	end_pointT: REAL
+  	ProStest, ProEtest : REAL
+  	posi:  XYZWPREXT 
+  	
+
+
+--- Routines from Funklib
+ROUTINE Set_DOUT (OutNr   :INTEGER; Value : BOOLEAN): BOOLEAN FROM FunktLib
+ROUTINE Get_DIN (OutNr   :INTEGER): BOOLEAN FROM FunktLib
+ROUTINE Get_IReg (Number : INTEGER) :INTEGER FROM FunktLib
+ROUTINE Get_RReg (Number : INTEGER) :REAL FROM FunktLib
+ROUTINE Set_IReg (Number : INTEGER; Value : INTEGER) FROM FunktLib
+ROUTINE Set_RReg (Number : INTEGER; Value : REAL) FROM FunktLib
+ROUTINE Hvis (ValocalR : REAL; Compare : STRING; Var2 : REAL ; Stp_True : INTEGER; Stp_False : INTEGER) :INTEGER FROM Funktlib
+ROUTINE Def_PR (OutNr   : INTEGER; ReqD :INTEGER;ReqL:REAL;G1: INTEGER; G2:INTEGER; G3:INTEGER) FROM FunktLib
+
+ROUTINE Def_Cart_MP (RegNr: INTEGER; X :REAL;Y:REAL;Z:REAL;w:REAL;p:REAL;r:REAL;Ex1:REAL)FROM FunktLib
+ROUTINE Def_Jnt_MP (RegNr: INTEGER; J1:REAL; J2:REAL; J3:REAL; J4:REAL; J5:REAL; J6:REAL; J7:REAL; 
+J8:REAL; J9:REAL)FROM FunktLib
+ROUTINE Def_SP (OutNr   : INTEGER; X :REAL;Y:REAL;Z:REAL) FROM FunktLib	-- sensepunkt der lægges ud i registre
+ROUTINE Act_Pos(MPNr   : INTEGER;rob : INTEGER) FROM FunktLib	-- put aktuelle position i MP [nummer]
+ROUTINE Dir_func  FROM  Funktlib
+
+ROUTINE Searching(DirNum:INTEGER; SearchLen:INTEGER; Retract:INTEGER;SearcSign: BOOLEAN;Err_Cond:INTEGER):REAL FROM FunktLib
+ROUTINE Ch_Conf_Mov(PosExt1:XYZWPREXT;PosExt2:XYZWPREXT;ForceCh:INTEGER;SearchVal:BOOLEAN):XYZWPREXT FROM FunktLib
+ROUTINE Mot_Sens(PosDest:XYZWPREXT;SearchType : STRING; Flange: BOOLEAN ):Pos_Chk FROM FunktLib
+
+ROUTINE Motion(PosDest:XYZWPREXT;ForceCh:INTEGER)  FROM FunktLib
+ROUTINE Chk_Dest(PosDest:XYZWPREXT;ForceCh:INTEGER):Pos_Chk FROM FunktLib
+
+--- Routines from GeoLib
+ROUTINE Feat_Tbl (FeatNr :INTEGER) FROM GeoLib -- Feature information and steps
+ROUTINE ProfileH (H_meas: REAL) : INTEGER FROM GeoLib -- Profile Heigth
+ROUTINE ProThick : REAL FROM GeoLib -- Min. plate thickness
+
+ROUTINE Geo_Scal : REAL FROM GeoLib -- Scallop size
+ROUTINE Geo_CutRad  : REAL FROM GeoLib -- Radios
+ROUTINE Geo_NWTH  : REAL FROM GeoLib -- NWTCP Heigth
+ROUTINE Geo_NWTW  : REAL FROM GeoLib -- NWTCP Width
+ROUTINE Geo_NWTRad  : REAL FROM GeoLib -- NWTCP Radius
+
+ROUTINE Geo_WTH  : REAL FROM GeoLib -- WTCP Heigth
+ROUTINE Geo_WTW  : REAL FROM GeoLib -- WTCP Width
+ROUTINE Geo_WTRad  : REAL FROM GeoLib -- WTCP Radius
+
+ROUTINE Geo_ELCPH : REAL FROM GeoLib -- ELCP Heigth
+ROUTINE Geo_ELCPR : REAL FROM GeoLib -- ELCP Rad
+
+ROUTINE Geo_project FROM GeoLib -- ELCP Rad
+ROUTINE NB_check FROM GeoLib -- checking neighbour profiles
+
+ROUTINE SideLength FROM GeoLib -- gettting length of actual side profile
+
+--- Routines from Taskman
+ROUTINE Loop_AL FROM AnLa_ny
+ROUTINE Start_AL FROM AnLa_ny
+ROUTINE ReadLaser : REAL FROM AnLa_ny
+
+ROUTINE CheckLaw :INTEGER FROM TaskMan
+
+
+-- Routines from Inrotech
+ROUTINE StepMachine  FROM ALPT1
+--ROUTINE StepMachine2 FROM ALPT2
+
+--
+-------------------------------------------------------------------------------------------
+---- StepMachine (-1/1)
+-------------------------------------------------------------------------------------------
+ROUTINE StepMachine
+BEGIN
+
+--
+-----**************************************************************
+------- Init settings ----------------------
+----**************************************************************	
+	set_IReg(288,0) --rat hole closing
+			
+	-- Nulling all steps
+	FOR i = (1+SO) TO (60+SO) DO 
+		step[i].enbl=FALSE
+		step[i].e = 0
+		step[i].s = 0
+		step[i].z = 0
+		step[i].text = ''
+	ENDFOR
+	
+	-- resetting all steps for R1, if robot 3 is used in swap robots
+	IF swap_robot<>0 THEN
+		FOR i = (1+60) TO (60+60) DO 
+			step[i].enbl=FALSE
+			step[i].e = 0
+			step[i].s = 0
+			step[i].z = 0
+			step[i].text = ''
+		ENDFOR
+	endif
+	
+	-- Actual side profile present or not
+		IF SE=-1 THEN 
+			SideP=SideP1
+		else
+			SideP=SideP2
+		ENDIF
+		
+	-- Setting wb_start/end
+	IF (robot=1) THEN 
+		IF SE=-1 THEN 
+			--WB_act=wb_start1
+			free_dis=parts1[1].dist
+		else
+			--WB_act=wb_end1
+			free_dis=parts1[parts_num1].dist
+		ENDIF
+	else
+		IF SE=-1 THEN 
+			--WB_act=wb_start3
+			free_dis=parts3[1].dist
+		else
+			--WB_act=wb_end3
+			free_dis=parts3[parts_num3].dist
+		ENDIF
+	ENDIF
+	
+	-- if robot 3 is sensing only heigth and flange
+IF ((robot=3) AND (Get_IReg(290)=0) AND (((SE=-1) AND (dis_start<>1)) OR ((SE=1) AND (dis_end<>1)))) THEN 
+		--Step[2+SO].enbl = TRUE -- web profile sensing
+		Step[6+SO].enbl = TRUE -- Heigth and flange
+		
+		IF  ((SideP<>0) AND (No_PF=FALSE)) THEN 
+			end_type =0
+			Step[1+SO].enbl = TRUE-- too avoid problems
+			Step[2+SO].enbl = TRUE-- too avoid problems
+			
+			Step[4+SO].enbl = TRUE -- web profile sensing
+			Step[7+SO].enbl = TRUE -- web heigth
+						
+			--IF end_type=1 THEN 
+				Step[3+SO].enbl = TRUE -- to find web end... temp
+			--ENDIF
+			
+			IF end_type=8 THEN 
+				Step[12+SO].enbl = TRUE -- web end 
+			ENDIF
+			
+			IF  ((SE=1) AND (var_heigth=FALSE) AND (sideP<>0)) THEN -- if END OF profile skip profiler heigth sensing
+					Step[6+SO].enbl = FALSE
+			ENDIF
+			
+			IF ((SkipEnd=TRUE)) THEN 
+				FOR i = (1+SO) TO (60+SO) DO 
+					step[i].enbl=FALSE
+					step[i].e = 0
+					step[i].s = 0
+					step[i].z = 0
+					step[i].text = ''
+				ENDFOR
+			ENDIF				
+				
+		else
+			IF SE=1 THEN 
+				DELAY 2000 -- skip sensing with R3
+				GOTO endlabel
+			ENDIF
+		ENDIF
+		
+		IF ((SkipEnd=TRUE) AND (sideP=0)) THEN 
+			DELAY 2000 -- skip sensing with R3
+				GOTO endlabel
+		ENDIF
+	
+	
+	-- Normal run
+	Else
+		--SETTING steps ON first steps
+		Step[1+SO].enbl = TRUE 
+		Step[2+SO].enbl = TRUE
+		IF SideP=0 THEN 
+			Step[11+SO].enbl = TRUE -- end with no sideP
+		else
+			Step[3+SO].enbl = TRUE -- end with sideP
+		ENDIF
+		
+		--IF (((SE=-1) OR (swap_robot<>0)) AND ((cross_num<>0)) THEN -- only sens height of profile if start or weld both sides
+			Step[6+SO].enbl = TRUE -- Heigth and flange
+		--ENDIF
+		
+		-- ENABLE step 4 if side profile
+		IF SideP<>0 THEN 
+			Step[4+SO].enbl = TRUE
+			Step[7+SO].enbl = TRUE
+		ENDIF
+		
+		-- if no PF
+		IF ((No_PF=TRUE) AND (sideP<>0)) THEN 
+				Step[4+SO].enbl = FALSE
+				Step[7+SO].enbl = FALSE
+				
+		ENDIF
+			
+		
+		-- enabling step depending ON profile length with one side
+		IF ((Pleng<500) AND (SE=(-1)) AND (SideP2=0) and (SideP1=1))  THEN
+			 step[13+SO].enbl=TRUE
+		ENDIF
+		
+		ProX= 0
+		ProY= 0
+		ProZ= 0
+		
+		ProX1= 0
+		ProY1= 0
+		ProZ1= 0
+		
+		ProX3= 0
+		ProY3= 0
+		ProZ3= 0
+	
+		S_dir=0
+		
+		featnr=0
+		featnrR=0
+		featnrL=0
+		end_type =0
+		end_type1 =0
+		end_type3 =0
+		
+		web_type=0
+		web_type1=0
+		web_type3=0
+		ProWS=0
+		ProWE=0
+		PF_Low=0
+		PF_Low1=0
+		PF_Low3=0
+		PF_High=0
+		PF_High1=0
+		PF_High3=0
+		OProHei=0
+		OPro_flange=0
+		OPro_flange1=0
+		OPro_flange3=0
+		OPro_type=0
+		FlangeSW=0
+		FlangeSW1=0
+		FlangeSW3=0
+		low_mirror=0
+				 
+		tool_dir=0
+		
+	-- auto skip ends
+	IF ((SkipEnd=TRUE)) THEN 
+		FOR i = (1+SO) TO (60+SO) DO 
+			step[i].enbl=FALSE
+			step[i].e = 0
+			step[i].s = 0
+			step[i].z = 0
+			step[i].text = ''
+		ENDFOR
+		step[1+SO].enbl=TRUE
+		step[2+SO].enbl=TRUE
+		IF SideP<>0 THEN 
+			--step[4+SO].enbl=TRUE
+			--web_type=5
+		ENDIF
+		end_type=5
+	
+		
+		-- Move gantry for skipend-- but only once
+		IF SkipEndMove = FALSE THEN 
+			IF XY_dir=1 THEN 
+				dist=100
+				
+				IF ((SideP=0) AND (Get_IReg(495)=21232)) THEN -- bigger distance if no side profile
+					dist = 250
+				ENDIF
+				
+				def_PR(11,1,dist,0,1,0)--gantry
+				CALL_PROG('PB_move2',statmpl)
+				SkipEndMove=TRUE
+			ENDIF
+		ENDIF
+		
+		
+
+	
+	ENDIF
+	
+	
+		-- init move to reach start of profile
+		--IF ((SkipEndMove = FALSE) AND (SE=-1) AND (XY_dir=1) AND (free_dis>400)) THEN 
+			--act_pos(8,2) --gets gantry pos
+			--dist = mp[8].x-X_start
+			--
+			--def_PR(11,1,dist,0,1,0)--gantry
+			--CALL_PROG('unfold1',statmpl) -- temp
+			--CALL_PROG('unfold3',statmpl) -- temp
+			--CALL_PROG('PB_move2',statmpl)
+		--ENDIF		
+	
+			
+	act_pos(8,2) --gets gantry pos
+	--- X most be relative to gantry X!!!!
+	
+	IF XY_dir = 1 THEN -- X direction
+		IF  SE = -1 THEN --  STart
+			ProE_tmp=X_start-mp[8].x
+			ProS_tmp=Y_start
+		else 
+			ProE_tmp=X_end-mp[8].x--- End
+			ProS_tmp=Y_end
+		ENDIF
+	
+	ENDIF
+	
+	IF XY_dir = 2 THEN -- Y direction
+		IF  SE = -1 THEN --  STart
+			ProE_tmp=Y_start
+			ProS_tmp=X_start-mp[8].x
+		else 
+			ProE_tmp=Y_end -- End
+			ProS_tmp=X_end-mp[8].x
+		ENDIF
+	ENDIF
+	
+	
+	-- Convert to Userframe 2: 
+	IF XY_dir = 1 THEN 	
+		ProE=COS(Pang)*ProE_tmp-SIN(Pang)*ProS_tmp	
+		ProS=SIN(Pang)*ProE_tmp+COS(Pang)*ProS_tmp
+	else
+		ProS=COS(Pang)*ProS_tmp-SIN(Pang)*ProE_tmp	
+		ProE=SIN(Pang)*ProS_tmp+COS(Pang)*ProE_tmp
+	ENDIF
+	
+	-- testing getting back
+	pang2=pang*(-1)
+	ProEtest=COS(Pang2)*ProE-SIN(Pang2)*ProS
+	ProStest=SIN(Pang2)*ProE+COS(Pang2)*ProS
+	
+		-- Sensing directions
+		IF XY_dir = 1 THEN -- profile X direction
+			ProX=ProE
+			ProY=ProS
+		else
+			ProX=ProS
+			ProY=ProE
+		ENDIF
+	
+ENDIF
+	
+-- Handling differences between start and end of profiles
+	IF ((SE=-1) AND ((Robot=1) OR (swap_robot=-3))) THEN -- only sens profile in start 
+		Profile_type = 0
+		proHei =0
+		proHei1 =0
+		proHei3 =0
+		flange=0
+		Flange1 =0
+		Flange3 =0
+		flangew=0
+		flangew1=0
+		flangew3=0
+		
+		low_ang1=0
+		low_ang3=0
+		low_angS1=0
+		low_angS3=0
+		
+	
+	else
+		IF robot=1 THEN 
+			flange=flange1
+		else
+			flange=flange3
+		ENDIF
+		
+	ENDIF
+	
+
+--******************************
+
+	
+
+	
+--*********************************
+-- init Position
+--*********************************
+	--Getting Endpoint
+	IF cross_num<>0 THEN 
+		IF XY_dir = 1 THEN --X profile
+			IF SE=-1 THEN 
+				end_pointT=X_start
+			else 
+				end_pointT=X_end
+			ENDIF
+		else
+			--Y-profiles
+				IF SE=-1 THEN 
+					end_pointT=Y_start
+				else 
+					end_pointT=Y_end
+				ENDIF
+		ENDIF
+	ENDIF
+	
+	E_offs=-100
+	S_offs= 50
+	
+	-- auto skip ends
+	IF SkipEnd=TRUE THEN 
+		E_offs=-250
+		IF SideP<>0 THEN -- less if there is side profile, then no overlap
+			E_offs=-150
+		ENDIF
+	ENDIF
+	
+	IF cross_num<>0 THEN 
+		IF ABS(cross[cross_num].xy-end_pointT)<300 THEN 
+			E_offs=-50
+		ENDIF
+	ENDIF
+	
+	-- R_Angle use for the first step
+		
+	
+	-- changing angle for back sensing robot
+		Sensback=FALSE
+		IF ((XY_dir=1)) THEN
+			IF ((robot=1) AND (((X_dir=1) AND (SE=1)) OR ((X_dir=(-1)) AND (SE=(-1))))) THEN
+				Sensback=TRUE
+			ENDIF
+			
+			IF ((robot=3) AND (((X_dir=1) AND (SE=(-1))) OR ((X_dir=(-1)) AND (SE=1)))) THEN
+				Sensback=TRUE
+			ENDIF
+			
+		ENDIF
+		
+		IF Sensback= TRUE THEN 
+			r_angle=-25 -- angle
+		else
+			r_angle=25 -- angle
+		ENDIF
+	
+		p_angle=40 -- angle
+	
+	IF free_dis<300 THEN 
+		E_offs=-50
+		IF Sensback= TRUE THEN 
+			r_angle=-10 -- angle
+		else
+			r_angle=10 -- angle
+		ENDIF
+	ENDIF
+	
+	Dir_func
+	
+	--7 axis position
+	IF XY_dir=1 THEN 
+		ExtOffset2 = 150
+	else
+		ExtOffset2 = 150 -- avoid collision with high X profiles in china
+	ENDIF
+	
+	-- ad offset for skipend + Y-dir profile
+	IF ((XY_dir=2) AND (skipend=TRUE)) THEN 
+		extoffset2=extOffset2+150
+	ENDIF
+		
+	IF XY_dir = 1 THEN
+		IF robot = 1 THEN
+			Real_tmp=(ProY+Y_offs)-ExtOffset2*Get_IReg(179)
+		else
+			Real_tmp=(ProY+Y_offs)+ExtOffset2*Get_IReg(179)
+		ENDIF
+	else
+		Real_tmp=(ProY+Y_offs)-ExtOffset2*SE*Y_dir
+	ENDIF		
+	
+
+	
+
+--Switching to UF2 
+$GROUP[1].$UFRAME = $MNUFRAME[1, 2] 
+$GROUP[3].$UFRAME = $MNUFRAME[3, 2] 
+
+Set_IReg(96,2) -- setting userframe for TP program
+
+-- unfolding if clean was before
+IF ((robot=1) AND (tasknr1=19)) THEN 
+	act_pos(9,robot)
+	IF mp[9].z > 200 THEN 
+		CALL_PROG('unfold1',statmpl)
+	ENDIF
+endif
+
+
+
+Def_Cart_mp(1,ProX+X_offs,ProY+Y_offs,50,0,p_angle,r_angle,real_tmp)
+
+-- correct 7 axis first, if arm is up
+
+act_pos(2,robot)
+IF mp[2].z>300 THEN 
+	real_local=mp[2].ext1-mp[1].ext1
+	mp[2].y=mp[2].y-real_local
+	mp[2].ext1=mp[1].ext1
+	Motion(mp[2],0) -- done in unfold
+ENDIF
+
+Motion(mp[1],0)
+
+sidelength -- getting current side length
+
+---################################################--
+--  Step 1 Sensing base -- 
+--################################################--
+SC=1+SO
+IF step[SC].enbl=TRUE THEN
+	Actstep=SC
+	ErrorNo = 501
+			
+--*************************** Sensing Z of base ****************************
+
+	-- Starting point
+	
+	E_offs=-130
+	IF short_prof=TRUE  THEN
+		E_offs=-80 -- was -50.. problem with scallop
+	ENDIF
+			
+	S_offs= 50
+	
+		-- temp bilbao... lave noget andet med at den genbruge slut svejsning
+	--IF ((XY_dir = 1)) THEN 
+		--E_offs=-80
+		--r_angle=15
+	--ENDIF
+	
+			-- auto skip ends
+	IF SkipEnd=TRUE THEN 
+		E_offs=-250
+		IF SideP<>0 THEN -- less if there is side profile, then no overlap
+			E_offs=-150
+		ENDIF
+	ENDIF
+	
+		IF Sensback= TRUE THEN 
+			r_angle=-25 -- angle
+		else
+			r_angle=25 -- angle
+		ENDIF
+		
+		IF NB_back>=5 THEN 
+			p_angle=35
+			S_offs= 35
+		ENDIF
+	
+	IF free_dis<300 THEN 
+			E_offs=-50
+			IF Sensback= TRUE THEN 
+				r_angle=-10 -- angle
+			else
+				r_angle=10 -- angle
+			ENDIF
+	ENDIF
+		
+		
+	Dir_func
+	Def_Cart_MP(2,ProX+X_offs,ProY+Y_offs,50,0, p_angle, r_angle,99999)
+	Motion(MP[2],0)
+	
+	--Sensing
+	SensSpeed = 50
+	
+	-- if laser is on, move away from profile
+	IF DIN[I_Slaser]=ON THEN 
+		S_dir=2
+		dir_func
+		step[SC].S=Searching(S_dir,100,-10,FALSE,0)
+		ProS=step[SC].S
+	ENDIF		
+	step[SC].z = Searching(-3,75,0,TRUE,0)+1.5 -- Z value -- was 100 mm, but pos not reach
+	
+	--handling rollers in China: 
+	IF Step[SC].z>9000 THEN 
+		Step[SC].z=0
+	ENDIF
+	
+	ProZ = step[SC].z
+	
+	-- Storing End and side info from sensing... used in web offset in step 41
+	step[SC].E=ProE-- scanned value
+	step[SC].S=ProS -- -scanned value
+	zbase=ProZ
+	
+				
+ENDIF
+		
+--################################################--
+-- Step 2 Sensing profile fine Y  and Z for narror edge
+--################################################--
+SC=2+SO
+IF step[SC].enbl=TRUE THEN
+	Actstep=SC
+	ErrorNo = 501	
+	
+	--*************************** Sensing Side of profile ****************************
+	
+	-- same values as for step 1
+	
+	-- Starting point
+	
+	E_offs=-130
+	IF short_prof=TRUE  THEN
+		E_offs=-80
+	ENDIF
+	
+	S_offs= 50
+	
+	IF NB_back>=5 THEN 
+		p_angle=35
+		S_offs= 35
+	ENDIF
+	
+		-- temp bilbao... lave noget andet med at den genbruge slut svejsning
+	--IF ((XY_dir = 1)) THEN 
+		--E_offs=-80
+		--r_angle=15
+	--ENDIF
+	
+			-- auto skip ends
+	IF SkipEnd=TRUE THEN 
+		E_offs=-250
+		IF SideP<>0 THEN -- less if there is side profile, then no overlap
+			E_offs=-150
+		ENDIF
+	ENDIF
+	
+		IF Sensback= TRUE THEN 
+			r_angle=-25 -- angle
+		else
+			r_angle=25 -- angle
+		ENDIF
+	
+	IF free_dis<300 THEN 
+			E_offs=-50
+			IF Sensback= TRUE THEN 
+				r_angle=-10 -- angle
+			else
+				r_angle=10 -- angle
+			ENDIF
+	ENDIF
+	
+	Dir_func	
+	Def_Cart_MP(3,ProX+X_offs,ProY+Y_offs,ProZ+40,0, p_angle, r_angle,99999) 
+	
+	-- had very thick plates in bilbao.. maybe add basplate thickness. had to set it to 60
+	-- was proz+30, but 22 mm thick baseplate conflicted with that
+			
+	Motion(MP[3],0)
+		
+	sensspeed = 50
+	
+	S_dir=-2
+	dir_func
+	
+	IF DIN[I_Slaser] =OFF THEN -- if laser is off, sens down
+			step[SC].S=Searching(S_dir,250,10,TRUE,1)+1.5*F_dir -- was 150 in seach length... but too short 2018-04-24
+		else
+			step[SC].S = Searching(-4,125,0,FALSE,1) --if scanning is bad
+	ENDIF
+	
+	 -- if very short profile ---------------------------------------
+	IF ((step[SC].S>9000) AND (SideP<>0)) THEN 
+		Short_prof = TRUE
+		 step[13+SO].enbl=FALSE
+		
+		-- then there is always side profile. sens for this
+		
+		S_dir=1
+		dir_func
+		step[SC].E=Searching(S_dir,250,10,TRUE,0)+1.5*F_dir 
+		
+		--sens to side of profile
+		S_dir=-2
+		dir_func
+		step[SC].S=Searching(S_dir,150,20,TRUE,0)+1.5*F_dir 
+	ENDIF
+	
+	--IF  (narrow_edge=TRUE) THEN 
+		real_tmp=(zbase+40)+25 -- search to max Z=-25
+		
+		step[SC].z = Searching(-3,ROUND(real_tmp),0,TRUE,1)+1.5 -- Z value.. was 75, but too much
+		ProZ = step[SC].z
+		Zbase=ProZ
+	--ENDIF
+		
+	ProS=step[SC].S
+	
+	-- auto skip ends
+	IF SkipEnd=TRUE THEN 
+		act_pos(1,robot)
+		IF XY_dir = 1 THEN -- X direction
+			step[SC].E=mp[1].x
+		else
+			step[SC].E=mp[1].y
+		ENDIF
+		ProE=step[SC].E
+	
+	ENDIF
+		
+ENDIF
+
+
+--################################################--
+-- Step 6 Sensing heigth and flange type of profile
+--################################################--
+SC=6+SO
+-- Handling no heigth sensing
+IF No_hei_sens=TRUE THEN 
+	step[SC].enbl=FALSE
+	prohei=profile[Jobno].top1
+ENDIF
+
+
+IF step[SC].enbl=TRUE THEN
+	Actstep=SC
+	ErrorNo = 501	
+	--*************************** Sensing analog ****************************
+		
+	E_offs=-250 -- was -300 but gave limit error
+	IF SE=1 THEN  -- spain we need to sens both ends
+		E_offs=-175 -- not to hit the weld
+	ENDIF
+		
+	-- if we have a crossing profile change distance
+	IF SkipEnd=TRUE THEN 
+		E_offs=0
+	ENDIF
+	
+	IF swap_robot <>0 THEN 
+		E_offs=-150
+	ENDIF
+	
+	--checking for possition of profile end i X
+	IF XY_dir=1 THEN 
+		IF ABS(proE)>100 THEN 
+			E_offs=-50
+		ENDIF
+	ENDIF
+			
+	S_offs=0
+	r_angle= 0 -- was zero pos not reach
+	
+	-- checking free distance
+	IF free_dis<250 THEN 
+		e_offs=(free_dis-100)*(-1)
+	ENDIF 
+	
+	IF E_offs>0 THEN 
+				e_offs=-50
+				r_angle= 10
+			ENDIF
+
+	IF short_prof=TRUE  THEN
+		E_offs=-20
+	ENDIF
+	
+	IF Pleng<400  THEN
+		E_offs=-100
+	ENDIF
+	
+	act_pos(4,robot) -- store position
+	
+	
+	-- changing angle for back sensing robot
+	IF ((XY_dir=1)) THEN
+			r_angle=10
+			IF sensback=TRUE THEN 
+				r_angle=-25
+			ENDIF
+	ENDIF
+		
+	Dir_func
+	
+	Def_Cart_MP(2,ProX+X_offs,ProY+Y_offs,Zbase+50,0, 40, r_angle,99999) -- was +50
+	
+	-- move on external axis for profiles in X
+	IF XY_dir=1 THEN 
+		real_tmp=150
+	else
+		real_tmp=0 -- undgå kollision med høj x profil kina
+	ENDIF
+	
+	IF skipend=TRUE THEN
+		real_tmp=0
+	ENDIF
+	
+		IF XY_dir=1 THEN  
+			IF robot=1 THEN
+				mp[2].ext1=mp[2].ext1-real_tmp*Get_IReg(179)
+			else
+				mp[2].ext1=mp[2].ext1+Real_tmp*Get_IReg(179)
+			ENDIF
+		else
+			
+			mp[2].ext1=mp[2].ext1-real_tmp
+		
+		ENDIF
+		-- to avoid collision with legs
+		IF mp[2].ext1<200 THEN 
+			mp[2].ext1=200
+		ENDIF
+		
+	motion(mp[2],0)
+
+		 
+	--Target point for heigth sensing
+	mp[10]=mp[2]
+	mp[10].z=600
+	
+	mp[10].p=110 -- work WITH 90 for a couple OF days... THEN limit ERROR
+	
+	IF XY_dir=1 THEN  
+			IF robot=1 THEN
+				mp[10].ext1=mp[10].ext1-250
+			else
+				mp[10].ext1=mp[10].ext1+250
+			ENDIF
+	ENDIF
+	
+	IF mp[10].ext1<200 THEN 
+			mp[10].ext1=200
+	ENDIF
+	
+	
+	s_dir=1
+	dir_func
+	
+	-- checking position
+	CHECK_EPOS (mp[10], $GROUP[robot].$UFRAME, $GROUP[robot].$UTOOL, int_tmp,robot)  	
+		CHECK_EPOS (mp[10], $MNUFRAME[3,2], $MNUTOOL[3, 3], int_tmp,robot)  	
+
+	mp[10].z=300 -- temp
+		mp[10].p=50
+
+	IF ((int_tmp<>0)) THEN -- quic fix
+		mp[10].z=300
+		mp[10].p=50
+		
+		-- checking 7 axis position 
+			
+		GET_VAR(int_tmp,'*SYSTEM*','$PARAM_GROUP[1].$UPPERLIMS[7]', real_local,Statin)
+		IF mp[10].ext1>real_local THEN
+			mp[10].ext1=real_local-10
+		ENDIF
+		
+		GET_VAR(int_tmp,'*SYSTEM*','$PARAM_GROUP[1].$lowerLIMS[7]', real_local,Statin)
+		IF mp[10].ext1<real_local THEN
+			mp[10].ext1=real_local+10
+		ENDIF
+		
+	ENDIF	
+
+	finddiff = 10 -- edge differance
+	sensspeed = 125
+	
+	Sens_Pos=Mot_sens(mp[10],'A',FALSE) -- sensing in Y
+	step[SC].text = edge_type
+	
+	--********************** Front: flange side ****************************
+	IF edge_type = 'Front' THEN --
+		act_pos(6,robot)
+		flangew=280-min_dis -- trigger point to min distance during analog sensing
+		flange =2-- Setting flange
+			
+		sensspeed = 50
+		tool_dir=3 -- what point to get from tool sensing
+		IF DIN[I_SLaser]=ON THEN 
+				step[SC].z=Searching(4,75,0,FALSE,0)-1
+			else
+				step[SC].z=Searching(-4,75,0,TRUE,0)+1
+		ENDIF
+	
+		Prohei=Step[SC].z-Zbase
+		
+		-- Handling mirror error from shiny surface
+		IF step[SC].z>9000 THEN 
+			edge_type = 'Gap'
+		ENDIF
+			
+	ENDIF
+	
+	--**************Gap or back: Back of profile****************************
+	IF (edge_type = 'Gap') OR (edge_type = 'Back')THEN  --no connection
+			flange =1-- Setting flange
+			flangew=0
+			
+			step[SC].z = Sens_Pos.Pos_Select .z
+			Prohei= step[SC].z -Zbase - 10 --Heigth of profile
+						
+	ENDIF
+	
+	
+	--*************************** Flush ****************************
+	IF edge_type = 'Flush' THEN
+		flange =1-- Setting flange
+		flangew=0
+		
+		Prohei=750
+		-- temp until we have seen how high we can sens
+		--ErrorNo = 501         -- Critical point error
+		--ErrorReq = TRUE	
+		--ABORT
+	
+	ENDIF	
+	
+	
+	--*************************** Setting Values to active robot  *****************	
+	
+	IF robot=1 THEN 
+		flange1=flange
+		flangeW1=flangew
+	else
+		flange3=flange
+		flangeW3=flangew
+	ENDIF
+	
+		--*************************** Determind profile type *****************	
+	-- setting prohei for robots
+	IF Robot=1 THEN 
+		prohei1=prohei	
+	else
+		prohei3=prohei	
+	ENDIF
+		
+	IF ((prohei1<>0) AND ((prohei3<>0))) THEN 
+		
+		-- Flatbars
+		IF ((flange1=1) AND ((flange3=1))) THEN 
+			profile_type=1
+		ENDIF
+		
+		--T-profiles
+		IF ((flange1=2) AND ((flange3=2))) THEN 
+			profile_type=4
+		ENDIF
+		
+		
+		--L-profiles
+		prohei=(prohei1+prohei3)/2
+		IF flange1<>flange3 THEN -- not flatbar or T profile
+			IF flangeW1>flangeW3 THEN 
+				IF (flangeW1/prohei)>0.4 THEN 
+					profile_type=3
+				ENDIF
+			else
+				IF (flangeW3/prohei)>0.4 THEN 
+					profile_type=3
+				ENDIF
+			ENDIF 
+		ENDIF
+		
+		--Bulb Profiles 
+		IF profile_type=0 THEN -- if none of the above
+			profile_type=2
+		ENDIF
+			
+		--setting low angles for L-profiles
+		--temp outcomment china, but spain needs it
+		IF ((ProHei < 225) AND (ProHei>130) AND (profile_type=3)) THEN
+			IF flange1=2 THEN --R1 has flange side
+				low_ang1=1
+			else
+				--R3 has flange
+				low_ang3=1
+			ENDIF
+		ENDIF
+	
+		-- if T-bar WITH slope!! GO low
+		IF Get_Ireg(289)=1 THEN 
+			low_ang1=1
+			low_ang3=1
+		ENDIF
+		
+	ENDIF
+	
+	-- move back to init pos
+	motion(mp[4],0)
+		
+ENDIF
+
+--################################################--
+-- Step 4 Sense position of opposite profile
+--################################################--
+
+SC=4+SO
+IF step[SC].enbl=TRUE THEN
+	Actstep=SC
+	ErrorNo = 501	
+	--*************************** Sensing Digital  ****************************
+		
+	E_offs=-100 -- china was 130
+	IF skipEnd=TRUE THEN 
+		E_offs=0
+	ENDIF
+	S_offs= 70
+	r_angle=50 -- angle
+	p_angle=50
+	IF NB_back>=5 THEN 
+		p_angle=40
+	ENDIF
+	
+	Dir_func
+	
+	Def_Cart_MP(2,ProX+X_offs,ProY+Y_offs,ProZ+30,0, p_angle, r_angle,99999)
+	
+	motion(mp[2],0)
+	
+	sensspeed = 50
+	S_dir=1
+	dir_func
+	step[SC].E=Searching(S_dir,300,0,TRUE,0)-0*F_dir
+	-- checking on sensing
+		IF step[SC].E>9900 THEN -- did not fint anything, very short web
+			step[SC].E=ProE
+			--step[SC].enbl=FALSE -- disble this step, used to check elsewhere
+			step[7+SO].enbl=FALSE
+		ENDIF
+	
+	ProWS=step[SC].E -- position of web profile
+	ProE=step[SC].E
+	
+	--ProE=step[SC].E	-- in order to get correct  position for step 3
+	IF ((skipend=FALSE) AND (web_type1<>5)) THEN 
+		web_type = 100
+	ENDIF		
+ENDIF
+
+--################################################--
+-- Step 11 Sensing for end type  of profile with NO side profile
+--################################################--
+SC=11+SO
+IF step[SC].enbl=TRUE THEN
+	Actstep=SC
+	ErrorNo = 501	
+	
+	PF_low = 0 -- no PF weld
+	PF_High = 0 -- no PF weld
+	web_type=0 -- no web
+	
+	--*************************** Sensing analog ****************************
+	
+	E_offs=-130-- was 100. in order get big cut out
+	IF short_prof=TRUE  THEN
+		E_offs=-50
+	ENDIF
+	
+	p_angle=40
+	
+	S_offs= 0
+	
+	r_angle=35 -- angle was 45 before
+	
+		-- changing angle for back sensing robot
+		IF sensback=TRUE THEN
+			r_angle=0
+		ENDIF
+	
+	-- Setting Heigth for init point
+	
+	IF proHei > 180 THEN
+			real_tmp=100
+			E_offs=-200 -- to handle angle profiles
+	ENDIF
+	
+	IF ((proHei<250) AND (flange=2)) THEN -- go lower for low L/T-bars
+		p_angle =55
+	ENDIF
+	
+	IF ((proHei <= 180))  THEN --for low profiles or low L/T bars
+		--real_tmp=50 -- too low for big cutout
+	--else
+		--real_tmp=80
+		real_tmp=prohei-50 -- was -30 was too high
+		p_angle=50-- to go lower on lower profiles
+		IF flange=2 THEN 
+			p_angle =55
+		ENDIF
+		
+	ENDIF
+	
+	IF ((Prohei<80) OR (prohei=0)) THEN -- error in sensing of profile heigth
+		Real_tmp=40
+	ENDIF
+	
+	IF free_dis<300 THEN 
+		E_offs=-50
+		IF Sensback= TRUE THEN 
+			r_angle=-10 -- angle
+		else
+			r_angle=10 -- angle
+		ENDIF
+	ENDIF
+	
+	-- ******************** Start Point************************
+		
+	Dir_func
+	
+	Def_Cart_MP(2,ProX+X_offs,ProY+Y_offs,Zbase+real_tmp,0, p_angle, r_angle,99999)
+	
+	
+	motion(mp[2],0)
+	
+	-- ******************** Analog searching   ***********************
+	
+	--Target point-- 
+	act_pos(5,robot)
+	mp[10]=mp[5]
+	s_dir=1
+	dir_func
+	
+	IF XY_dir = 1 THEN
+		mp[10].x=ProE+125*A_dir -- 200 was too much
+	else
+		mp[10].y=ProE+125*A_dir
+	ENDIF
+		
+	finddiff = 25 -- edge differance
+	mir_short=TRUE -- no short mirror
+	
+	sensspeed = 125-- go fast!!
+	
+	--Searching
+	Sens_Pos=Mot_sens(mp[10],'A',FALSE) -- sensing in Y
+	step[SC].text = edge_type
+	
+	-- store point end point
+	IF XY_dir=1 THEN 
+		step[SC].E = Sens_Pos.Pos_Select .x-10*A_dir
+	else
+		step[SC].E = Sens_Pos.Pos_Select .y-10*A_dir
+	ENDIF
+	
+		--*************************** Front ****************************
+	IF edge_type = 'Front' THEN --Error!!
+		
+		ErrorNo = 510
+		Errorreq=TRUE
+		DELAY 5000
+					
+	ENDIF
+	
+		
+	--*************************** Flush ****************************
+	IF edge_type = 'Flush' THEN
+		
+		end_type=5
+		
+	
+	ENDIF	
+	
+	--*************************** Gap ****************************
+	IF (edge_type = 'Gap') OR (edge_type = 'Back')THEN
+	
+		Step[14+SO].enbl=TRUE -- search for scallop
+		ProE=step[SC].E
+		
+		-- Move gantry - if x profiles
+						
+				--IF ((XY_dir = 1) AND (sideP=0) AND (ABS(proe)>75)) THEN 
+					--act_pos(1,1)
+					--
+					--dist=ProE*X_dir
+					--
+					--def_PR(11,1,dist,0,1,0)--gantry
+					--CALL_PROG('PB_move2',statmpl)
+					--
+				--
+					--
+				--ENDIF
+				--
+				--ProE=0
+		
+	ENDIF
+	
+
+ENDIF
+		
+		
+--################################################--
+-- Step 14  Searching for Scallop on free end profile
+-- search for scallop... and search back to find edge of scallop
+--################################################--		
+SC=14+SO
+IF step[SC].enbl=TRUE THEN
+	
+	-- Start point for motion
+	E_offs=-50
+	S_offs=0
+	
+	dir_func
+	
+	mp[6]=mp[10] -- current pos with angels from step 11
+	mp[6].x=ProX+X_offs
+	mp[6].y=ProY+Y_offs
+	
+	motion(mp[6],0)
+		 
+	--Target point-- 
+	mp[10]=mp[5]
+	E_offs=-15
+	S_offs=0
+	s_dir=1
+	dir_func
+	
+	mp[6].x=ProX+X_offs
+	mp[6].y=ProY+Y_offs
+	mp[6].z=Zbase+15
+	
+	
+	--- Analog sensing
+	mir_long=TRUE -- mirror long dis 450 not accepted
+	mir_short=TRUE -- no short mirror
+		
+	finddiff = 3 -- edge differance
+	
+	sensspeed = 75-- go fast!!
+	
+	--Searching
+	Sens_Pos=Mot_sens(mp[6],'A',FALSE) -- sensing in Y
+
+	step[SC].text = edge_type
+		
+	
+
+		--*************************** Front ****************************
+	--IF edge_type = 'Front' THEN --ERROR!!
+		--
+		--ErrorNo = 510
+		--Errorreq=TRUE
+		--ABORT
+					--
+	--ENDIF
+	
+	--*************************** Flush -- no Scallop  *************************
+	IF edge_type = 'Flush' THEN
+		end_type=3	
+		Step[16+SO].enbl=TRUE -- end of profile
+	ENDIF	
+	
+	--*************************** Gap -- scallop  ****************************
+	IF (edge_type = 'Gap') OR (edge_type = 'Back') OR (edge_type = 'Front')THEN
+		
+			IF overlap=TRUE THEN
+				act_pos(3,robot)
+					-- sense for baseplate. used for comparing in step 15
+					
+				Zbase=Searching(-3,60,0,TRUE,1)
+				
+			 	-- move back 
+				motion(mp[3],0)
+			ENDIF
+	
+		
+			end_type=7 -- Scallop
+		
+			-- Analog searching back to find baseplate (overlap 6)  or profile again (scallop 7 ). depending in type
+			r_angle=0
+		
+			IF NB_back>=5 THEN 
+				r_angle=15
+				p_angle=40
+			ENDIF
+			-- using P_angle from step 11
+			
+		-- correct angle before searching for end
+			Dir_func
+			-- store init point for later
+			act_pos(2,robot) -- use current Z value
+			--Def_Cart_MP(2,ProX+X_offs,ProY+Y_offs,mp[5].z,0, p_angle, r_angle,99999)
+			--mp[2].r=r_angle
+			--mp[2].p=p_angle
+			
+			--motion(mp[2],0)
+			
+			act_pos(6,robot)
+			IF sensback=TRUE THEN 
+				r_angle=-25
+			else 
+				r_angle=0
+			ENDIF
+			
+			mp[10]=mp[6]
+		
+			s_dir=-1
+			dir_func
+			
+			mp[10].r=r_angle
+			
+			IF XY_dir = 1 THEN
+				mp[10].x=mp[10].x+200*A_dir 
+			else
+				mp[10].y=mp[10].y+200*A_dir
+			ENDIF
+				
+			finddiff = 5 -- edge differance
+			
+			sensspeed = 75-- 
+			
+			Sens_Pos=Mot_sens(mp[10],'A',FALSE) -- sensing in 
+			real_tmp=readlaser
+			
+			-- extra check, if we found edge of baseplate
+			IF real_tmp>295 THEN 
+					Sens_Pos=Mot_sens(mp[10],'A',FALSE) -- sensing in Y
+			ENDIF
+			--step[SC].text = edge_type
+			
+			-- if we found edge 
+			IF edge_type<>'Flush' THEN 
+				
+				
+				IF XY_dir=1 THEN 
+					step[SC].E = Sens_Pos.Pos_Select.x
+				else
+					step[SC].E = Sens_Pos.Pos_Select.y
+				ENDIF
+				
+				ProE=step[SC].E	
+			else
+				-- flush -> Error
+					--ErrorNo = 510 
+					--Errorreq=TRUE
+					--ABORT
+					
+					-- did not find anythin... maybe due to funny scallop
+					-- keep endtype
+					--act_pos(2,robot)
+					
+					IF xy_dir=1 THEN 
+						step[SC].E=mp[2].x
+						ProE=step[SC].E
+					else
+						step[SC].E=mp[2].y
+						ProE=step[SC].E
+					ENDIF
+			--
+			ENDIF
+	
+	ENDIF
+	
+	
+ENDIF		
+			
+--################################################--
+-- Step 15  Checking for overlap profile
+-- compare set, 
+-- extra analog check
+--################################################--			
+-- Enable for overlap projects + free ends
+IF ((overlap=TRUE) AND (Step[11+SO].enbl=TRUE) AND (short_prof=FALSE) AND (Free_dis>500)) THEN 
+	Step[15+SO].enbl=TRUE
+ENDIF
+
+SC=15+SO
+IF step[SC].enbl=TRUE THEN
+	Actstep=SC
+	ErrorNo = 501		
+		
+		-- Starting point
+		E_offs=-200 
+		
+		S_offs=10
+		
+		IF Sensback= TRUE THEN 
+			r_angle=-25 -- angle
+		else
+			r_angle=25 -- angle
+		ENDIF
+		
+		IF NB_back>=5 THEN 
+			r_angle=35
+			p_angle=40
+		ENDIF
+		
+		-- using P_angle from step 11
+		
+	IF free_dis<300 THEN 
+		E_offs=-50
+		IF Sensback= TRUE THEN 
+			r_angle=-10 -- angle
+		else
+			r_angle=10 -- angle
+		ENDIF
+	ENDIF
+		
+		Dir_func
+		
+		-- start out of profile and search on baseplate
+		Def_Cart_MP(2,ProX+X_offs,ProY+Y_offs,zbase+30,0, p_angle, r_angle,99999)
+		
+		
+		motion(mp[2],0)
+		
+		
+		-- sense side of profile
+		--IF DIN[I_Slaser] =OFF THEN -- if laser is off, sens down
+			--step[SC].S=Searching(4,50,10,TRUE,1)+1.5*F_dir -- was 150 in seach length... but too short 2018-04-24
+		--else
+			--step[SC].S = Searching(-4,50,-10,FALSE,1) --if scanning is bad
+		--ENDIF
+		
+		-- Sense down
+		real_tmp=Searching(-3,60,0,TRUE,1)
+			
+		--- ********************************************
+		-- compare Z value to determind ovelap
+			--- ********************************************
+		IF real_tmp>Zbase+5 THEN 
+		
+			--Search to find baseplate edge
+			act_pos(6,robot)
+				
+			mp[10]=mp[6]
+			
+			s_dir=1
+			dir_func
+			
+			IF XY_dir = 1 THEN
+					mp[10].x=step[71].e+10*A_dir 
+				else
+					mp[10].y=step[71].e+10*A_dir
+				ENDIF
+			
+			finddiff = 5 -- edge differance 
+			
+			sensspeed = 75
+			
+			Sens_Pos=Mot_sens(mp[10],'A',FALSE) -- sensing in Y
+			
+			step[SC].text = edge_type
+				
+				-- if we found edge 
+				IF edge_type<>'Flush' THEN 
+					end_type=6 -- overlap feature
+					
+					IF XY_dir=1 THEN 
+						step[SC].E = Sens_Pos.Pos_Select.x
+					else
+						step[SC].E = Sens_Pos.Pos_Select.y
+					ENDIF
+					
+					
+					ProE=step[SC].E
+					Step[16+SO].enbl=FALSE -- end of profile
+					
+			
+			
+					-- Move gantry - if x profiles
+					--IF ((XY_dir = 1) AND (sideP=0)) THEN 
+						--
+						--act_pos(1,1)
+						--dist=ProE*X_dir
+						--
+						--def_PR(11,1,dist,0,1,0)--gantry
+						--CALL_PROG('PB_move2',statmpl)
+					--
+					--
+										--
+					--ProE=0
+				--ENDIF
+			ENDIF
+		ENDIF
+ENDIF
+
+--################################################--
+-- Step 16 Sensing second time for end, extension of step 11
+--################################################--
+SC=16+SO
+IF step[SC].enbl=TRUE THEN
+	Actstep=SC
+	ErrorNo = 501	
+	
+			--search for  end again... if angle end
+			act_pos(2,robot)
+			mp[2].z=Zbase+20
+		
+		-- to avoid limit error in x direction	
+			IF XY_dir = 1 THEN 
+					IF sensback=TRUE THEN 
+						r_angle=0
+					else
+						r_angle=25
+					ENDIF
+			
+				IF cross_num<>0 THEN 
+					IF ABS(cross[cross_num].xy-end_pointT)<300 THEN 
+						r_angle=10
+					ENDIF
+				ENDIF
+			
+				dir_func
+				mp[2].r=r_angle
+			ENDIF 
+			
+			e_offs=-30
+			s_offs=0
+			dir_func
+			
+			mp[2].x=ProX+X_offs
+			mp[2].y=ProY+Y_offs
+
+			
+			motion(mp[2],0)
+				
+				mp[3]=mp[2]
+				S_dir=1
+				dir_func
+				
+				IF XY_dir = 1 THEN
+					mp[3].x=ProE+175*A_dir --was 125... but too short change from 150 to 175... maybe too long?
+				else
+					mp[3].y=ProE+175*A_dir
+				ENDIF
+				
+				finddiff = 10 -- edge differance
+				mir_short=TRUE -- no short mirror
+				
+				sensspeed = 125-- go fast!!
+				
+				Sens_Pos=Mot_sens(mp[3],'A',FALSE) -- sensing in Y
+				step[SC].text = edge_type
+				IF (edge_type = 'Gap') OR (edge_type = 'Back')THEN 
+					IF XY_dir=1 THEN 
+						step[SC].E = Sens_Pos.Pos_Select .x
+					else
+						step[SC].E = Sens_Pos.Pos_Select .y
+					ENDIF
+					ProE=step[SC].E-10*A_dir
+				else
+					ErrorNo = 510
+					Errorreq=TRUE
+					DELAY 5000
+				ENDIF
+				
+ENDIF
+
+
+
+--################################################--
+-- Move gantry to center of edge
+--################################################--
+--IF ((step[11+SO].enbl=TRUE) AND (XY_dir=1) AND (SE=-1) AND (free_dis>400) AND (x_dir=(-1)) AND (proE<0)) THEN
+	 ----MOVE gantry TO center OF edge!!!!
+			--act_pos(8,2) --gets gantry pos
+			--
+			--dist = (ProE)*(-1)+75
+			--
+			--def_PR(11,1,dist,0,1,0)--gantry
+		--
+			--CALL_PROG('PB_move2',statmpl)
+			--
+			--ProE=75*X_dir*(-1)
+----
+--ENDIF
+
+
+
+--################################################--
+-- Step 3 Sensing for end type  of profile with side profile
+--################################################--
+SC=3+SO
+IF step[SC].enbl=TRUE THEN
+	Actstep=SC
+	ErrorNo = 501	
+	--*************************** Sensing analog ****************************
+		
+	E_offs=-100-- was 100. in order get big cut out
+	--IF short_prof=TRUE  THEN
+		--E_offs=-80
+	--ENDIF
+	--
+
+	S_offs= 0
+	r_angle=45 -- angle was 45 before
+	
+		-- changing angle for back sensing robot
+		IF sensback=TRUE THEN
+			r_angle=0
+		ENDIF
+	
+	p_angle=45
+	IF NB_back>=5 THEN 
+		p_angle=40
+	ENDIF
+		
+	Dir_func
+
+	Def_Cart_MP(2,ProX+X_offs,ProY+Y_offs,Zbase+15,0, p_angle, r_angle,99999)
+	
+	
+	motion(mp[2],0)
+		 
+	--Target point-- sense to after cutout . Using ProE from step 4
+	act_pos(5,robot)
+	mp[10]=mp[5]
+	s_dir=1
+	dir_func
+	
+	IF step[4+SO].enbl=TRUE THEN 
+		IF XY_dir = 1 THEN
+				mp[10].x=step[4+SO].E+15*A_dir -- add extra check i analog sensing.. if difference is big
+		else
+				mp[10].y=step[4+SO].E+15*A_dir
+		ENDIF
+	
+	else
+	
+		IF XY_dir = 1 THEN
+			mp[10].x=ProE+125*A_dir -- 200 was too much
+		else
+			mp[10].y=ProE+125*A_dir
+		ENDIF
+	ENDIF
+		
+	finddiff = 3 -- edge differance
+	
+	--finddiff = 6 -- edge differance
+	
+	sensspeed = 50 -- was 75
+	
+	Sens_Pos=Mot_sens(mp[10],'A',FALSE) -- sensing in Y
+	step[SC].text = edge_type
+	
+	E_offs=-5 -- because of sens speed
+	dir_func
+	
+	IF XY_dir=1 THEN
+		step[SC].E = Sens_Pos.Pos_Select .x + X_offs
+		IF edge_type = 'Flush' THEN 
+			step[SC].E = 0 -- to avoid pos not reach
+		ENDIF 
+	else
+		step[SC].E = Sens_Pos.Pos_Select .y + Y_offs
+	ENDIF
+	
+	ProE=step[SC].E
+
+	--*************************** Flush ****************************
+	IF edge_type = 'Flush' THEN
+		
+			end_type=8 -- scallop or gap on web profile
+			web_type = 100 -- no web
+			Step[12+SO].enbl = TRUE -- sensing Opro End R1
+	
+	ENDIF	
+	
+	--*************************** Gap ****************************
+	IF (edge_type = 'Gap') OR (edge_type = 'Back')THEN  --no connection
+			-- end_type = 2,3,4
+		
+				IF ((ABS(step[3+SO].E-step[4+SO].E)<10) AND (step[4+SO].enbl=TRUE) and (No_PF=false))  THEN -- only if big gap between profiles	
+					end_type = 1
+					web_type=1
+				else
+					-- to be confirmed in step 5
+					end_type = 100 -- it is active
+					Step[5+SO].enbl = TRUE
+					
+				ENDIF	
+				
+				-- overrule if no PF welding
+				IF No_PF=TRUE THEN 
+					end_type=4 -- forcing end_type
+					web_type=5
+					Step[5+SO].enbl = FALSE
+				ENDIF
+			
+	ENDIF
+	
+	--*************************** Front ****************************
+	IF edge_type = 'Front' THEN --Connection
+		Step[17+SO].enbl = TRUE -- sensing for scallop on Web
+	ENDIF
+		
+ENDIF
+
+--################################################--
+-- Step 17 Sensing for scallop on web
+--################################################--
+SC=17+SO
+IF step[SC].enbl=TRUE THEN
+	Actstep=SC
+	ErrorNo = 501	
+	
+	-- extra check on web to see if we have gap here
+		ProE=ProWS
+		E_offs=0
+		S_offs= 80
+		
+		r_angle=45 -- angle -- was 25
+		p_angle=45
+		IF NB_back>=5 THEN 
+			p_angle=40
+		ENDIF
+		
+		Dir_func
+		
+		Def_Cart_MP(2,ProX+X_offs,ProY+Y_offs,Zbase+15,0, p_angle, r_angle,99999)-- 50 before
+		
+		motion(mp[2],0)
+		
+		-- analog sensing of scallop/gap on web
+		E_offs=0
+		S_offs= 5
+		r_angle=45
+		Dir_func
+		
+		Def_Cart_MP(10,ProX+X_offs,ProY+Y_offs,Zbase+15,0, p_angle, r_angle,99999)-- 50 before
+		
+		finddiff = 3 -- edge differance
+		
+		--finddiff = 6 -- edge differance
+		
+		sensspeed = 50 -- was 75
+		
+		s_dir=1
+		dir_func
+		
+		Sens_Pos=Mot_sens(mp[10],'A',FALSE) -- sensing in Y
+		step[SC].text = edge_type
+				
+		-- Result handling
+		IF ((edge_type = 'Gap') OR (edge_type = 'Back')) THEN -- 
+			-- Scallop/gab on Web
+			--check for big gap
+			IF XY_dir = 1 THEN -- get sens result
+				real_tmp = Sens_Pos.Pos_Select .y
+			else
+				real_tmp = Sens_Pos.Pos_Select .x
+			ENDIF
+			
+			IF (ABS(ProS-real_tmp)>10) THEN -- only if big gap between profiles	
+				end_type=8
+				web_type = 100 -- no web
+				Step[12+SO].enbl = TRUE -- sensing Opro End R1
+			else
+						-- No scallop/gab
+				End_type = 1 -- Corner
+				web_type = 1 -- Corner
+				PF_low = 1
+			ENDIF
+		else
+			
+			-- No scallop/gab
+			End_type = 1 -- Corner
+			web_type = 1 -- Corner
+			PF_low = 1
+		ENDIF
+			
+ENDIF
+	
+	
+	
+--################################################--
+-- Step 5 Sense up for profile end
+--################################################--
+SC=5+SO
+IF step[SC].enbl=TRUE THEN
+	Actstep=SC
+	ErrorNo = 501	
+	--*************************** Sensing analog ****************************
+	
+	-- sense again like step 3 just higher. step  is zbase+
+	
+	
+	mp[2].z=mp[2].z+30
+	mp[10].z=mp[2].z
+	
+	motion(mp[2],0)
+	
+	
+	finddiff = 3 -- edge differance
+	
+	--finddiff = 6 -- edge differance
+	
+	sensspeed = 50 -- was 75
+	
+	Sens_Pos=Mot_sens(mp[10],'A',FALSE) -- sensing in Y
+	step[SC].text = edge_type
+	
+		
+	IF web_type  =100 THEN 
+			web_type=5
+	ENDIF
+		
+		--*************************** Gap ****************************
+	IF (edge_type = 'Gap') OR (edge_type = 'Back')THEN  --no connection
+		
+		end_type = 4 
+	else
+			end_type = 2 -- scallop	
+			pf_low=2
+		
+	ENDIF
+	
+	proE=step[3+SO].E -- Setting back ProE to end of profile
+ENDIF
+
+--################################################--
+-- Step 12 Sense  for OPro end, same as 5 for profile
+--################################################--
+SC=12+SO
+IF step[SC].enbl=TRUE THEN
+	Actstep=SC
+	ErrorNo = 501	
+	--*************************** Sensing analog ****************************
+	ProE_tmp=ProE-- storing ProE
+	ProE=ProWS
+	E_offs=5
+	S_offs= 12
+	
+	--E_offs=-12
+	--S_offs= -5
+	
+	r_angle=45 -- angle -- was 25
+	
+	Dir_func
+	
+	Def_Cart_MP(2,ProX+X_offs,ProY+Y_offs,Zbase+5,0, 45, r_angle,99999)-- 50 before
+	
+	motion(mp[2],0)
+	
+	-- Sensing up to search for scallop
+	-- if we sensed a small gap
+	IF DIN[I_Slaser] = ON THEN 
+		web_type = 1 -- Corner
+	else
+		step[SC].z=Searching(3,40,0,TRUE,0)-- digital sensing up
+		
+		IF Step[SC].z <9000 THEN -- Found plate
+			web_type = 2 -- scallop on Opro
+			PF_low=2
+			step[SC].z=Searching(-3,40,0,FALSE,1) -- to find edge for next sensing
+		else -- no plate
+			web_type = 4 -- or 3... same same
+			
+		ENDIF
+			-- Sensing end of web
+		S_dir=2
+		dir_func
+		step[SC].S=Searching(S_dir,75,0,TRUE,1)-0*F_dir
+		ProWE=step[SC].S
+	ENDIF
+	
+
+	ProE=ProE_tmp-- setting back ProE
+				
+ENDIF
+
+--################################################--
+ --Step 7 Sense OF opposite profile heigth-- 
+ --can be deleted later WHEN scanning works
+--################################################--
+SC=7+SO
+--IF act_sideL<200 THEN 
+	--step[SC].enbl=FALSE
+	--Oprohei=prohei
+--ENDIF
+--
+-- Handling no heigth sensing
+IF No_hei_sens=TRUE THEN 
+	step[SC].enbl=FALSE
+	Oprohei=profile[Jobno].top1
+ENDIF
+
+
+IF step[SC].enbl=TRUE THEN
+	Actstep=SC
+	ErrorNo = 501	
+	
+	-- temp, is also in alpt2
+--Getting side length
+			
+	sidelength
+		
+	--*************************** Sensing analog ****************************
+	ProE=step[4+SO].E-- reading ProE from step 4
+	
+	E_offs=0 -- 
+	S_offs= 125  -- was 150
+	
+	-- S_offs depending on act_side length
+	IF ((robot=1) AND (Act_sideL1<300)) THEN 
+		s_offs=30
+	endif
+	
+	IF ((robot=3) AND (Act_sideL3<300)) THEN 
+		s_offs=30
+	endif
+	
+	
+	r_angle=55 -- angle
+	
+	Dir_func
+	
+	Def_Cart_MP(2,ProX+X_offs,ProY+Y_offs,ProZ+40,0, 40, r_angle,99999)
+	
+	motion(mp[2],0)		
+	
+--Target point for heigth sensing
+	mp[10]=mp[2]
+	mp[10].z=500
+	mp[10].p=110
+	
+	s_dir=1
+	dir_func
+
+	finddiff = 10 -- edge differance
+	sensspeed = 125
+	
+	Sens_Pos=Mot_sens(mp[10],'A',FALSE) -- sensing in Y
+	step[SC].text = edge_type
+	
+	--**************Gap or back: Back of profile****************************
+	IF (edge_type = 'Gap') OR (edge_type = 'Back')THEN  
+			Opro_flange=1-- Setting flange
+			flangeSW=0
+			
+			OProhei= Sens_Pos.Pos_Select .z-Zbase - 5 --Heigth of profile
+			
+			-- comparing the 2 Opro
+			--temp. must look at side lengths of side profile, and correct position of heigth sensing
+			IF ((robot=3) AND (swap_robot=0)) THEN 
+				IF ABS(Oprohei1-Oprohei)>40 THEN 
+					IF Oprohei1>Oprohei THEN 
+						OproHei=Oprohei1
+					else
+						OproHei3=Oprohei
+					ENDIF
+				ENDIF
+			ENDIF 
+	ENDIF
+	
+	--********************** Front: flange side ****************************
+	IF edge_type = 'Front' THEN --
+		act_pos(6,robot)
+		flangeSW=280-min_dis -- trigger point to min distance during analog sensing
+		Opro_flange=2-- Setting flange
+						
+		sensspeed = 50
+		IF DIN[I_Slaser] =OFF THEN -- if laser is on, sens up
+			step[SC].z = Searching(-3,75,0,TRUE,1)
+		else
+			IF min_dis >280 THEN -- if gun is free of flange
+				step[SC].z = Searching(3,75,0,FALSE,1) -- sens down to get top of profile
+			else
+				act_pos(8,robot)
+				step[SC].z=mp[8].z
+			ENDIF
+		ENDIF
+			
+		OProhei=Step[SC].z-Zbase
+			
+	ENDIF
+	
+		
+	--*************************** Flush ****************************
+	IF edge_type = 'Flush' THEN
+		
+		-- temp until we have seen how high we can sens
+		ErrorNo = 501         -- Critical point error
+		ErrorReq = TRUE	
+		ABORT
+	
+	ENDIF	
+	
+	-- enabling step 8 or 9 if needed
+	IF ((ABS(prohei-Oprohei)>50) AND (end_type<=2)) THEN
+			PF_high = 100 -- not finished
+			IF Prohei>Oprohei THEN 
+				Step[8+SO].enbl = TRUE -- cutout in profile
+			else
+				Step[9+SO].enbl = TRUE	-- cutout in Oprofile
+			ENDIF
+	ENDIF
+	
+	
+	-- overruling above if web_type = 4
+		IF (web_type=4) THEN 
+			Step[8+SO].enbl = FALSE
+			pf_low=0
+			pf_high=0
+		ENDIF
+	
+		-- move away from profile
+		act_pos(5,robot)
+		mp[6]=mp[5]
+		s_dir=-1
+		dir_func
+		IF XY_dir = 1 THEN
+			mp[6].x=ProE+50*A_dir
+		else
+			mp[6].y=ProE+50*A_dir
+		ENDIF
+		
+		motion(mp[6],0)	
+		
+ENDIF
+
+-- setting opro_flange if not sensed
+IF ((web_type<>0) AND (Opro_flange=0)) THEN 
+	Opro_flange=1 
+ENDIF
+
+--################################################--
+-- Step 8 Sense for cutout in profile for crossing profile
+--################################################--
+SC=8+SO
+--temp
+IF Get_Ireg(495)=21232 THEN 
+	step[SC].enbl=FALSE
+ENDIF
+IF step[SC].enbl=TRUE THEN
+	Actstep=SC
+	ErrorNo = 501	
+	--*************************** Sensing analog ****************************
+	
+	E_offs=-75
+	S_offs= 20
+	r_angle=45 -- angle
+	
+	Dir_func
+	
+	Def_Cart_MP(2,ProX+X_offs,ProY+Y_offs,OProHei+Zbase+10,0, 65, r_angle,99999)
+	
+	motion(mp[2],0)
+		 
+	act_pos(5,robot)
+	mp[10]=mp[5]
+	s_dir=1
+	dir_func
+	IF XY_dir = 1 THEN
+		mp[10].x=ProE+0*A_dir
+	else
+		mp[10].y=ProE+0*A_dir
+	ENDIF
+		
+	finddiff = 3 -- edge differance
+	sensspeed = 125
+	
+	Sens_Pos=Mot_sens(mp[10],'A',FALSE) -- sensing in Y
+	step[SC].text = edge_type
+
+	
+	
+ENDIF
+
+--################################################--
+-- Step 9 Sense for cutout in Opposite profile for crossing profile
+--################################################--
+SC=9+SO
+--temp
+IF Get_Ireg(495)=21232 THEN 
+	step[SC].enbl=FALSE
+ENDIF
+IF step[SC].enbl=TRUE THEN
+	Actstep=SC
+	ErrorNo = 501	
+	--*************************** Sensing analog ****************************
+	
+	S_offs=60
+	E_offs= 20
+	r_angle= 50-- angle
+	p_angle=60
+	IF NB_back>=5 THEN 
+		p_angle=40
+	ENDIF
+	
+	Dir_func
+	
+	Def_Cart_MP(2,ProX+X_offs,ProY+Y_offs,ProHei+Zbase+10,0, p_angle, r_angle,99999)
+	
+	motion(mp[2],0)
+		 
+	act_pos(5,robot)
+	mp[10]=mp[5]
+	s_dir=1
+	dir_func
+	IF XY_dir = 1 THEN
+		mp[10].y=ProS+0*A_dir
+	else
+		mp[10].x=ProS+0*A_dir
+	ENDIF
+		
+	finddiff = 3 -- edge differance
+	sensspeed = 125
+	
+	Sens_Pos=Mot_sens(mp[10],'A',FALSE) -- sensing in Y
+	step[SC].text = edge_type
+
+	
+ENDIF
+	
+	
+--################################################--
+-- Step 13 Sensing length of short profiles
+--################################################--
+-- disable for china
+IF Get_IReg(495)<>21232 THEN 
+	step[13+SO].enbl=FALSE
+ENDIF
+
+SC=13+SO
+IF step[SC].enbl=TRUE THEN
+	Actstep=SC
+	ErrorNo = 501	
+	--*************************** Sensing analog ****************************
+	proE=step[3+SO].E
+	E_offs=-50
+	
+	S_offs= 20
+	r_angle=30 -- angle
+	
+	Dir_func
+	
+	Def_Cart_MP(2,ProX+X_offs,ProY+Y_offs,ProZ+50,0, 55, r_angle,99999)
+	
+	motion(mp[2],0)
+		 
+	act_pos(5,robot)
+	mp[10]=mp[5]
+	
+	s_dir=-1
+	dir_func
+	
+	IF XY_dir = 1 THEN
+		mp[10].x=ProE+200*A_dir
+	else
+		mp[10].y=ProE+200*A_dir
+	ENDIF
+		
+	finddiff = 3 -- edge differance
+	sensspeed = 125
+	
+	Sens_Pos=Mot_sens(mp[10],'A',FALSE) -- sensing in Y
+	step[SC].text = edge_type
+
+	
+	--*************************** Gap or Back****************************
+	IF (edge_type = 'Gap') OR (edge_type = 'Back')THEN 
+		--short profile
+		E_offs=-5 -- because of sens speed
+		dir_func
+		
+		IF XY_dir=1 THEN
+			step[SC].E = Sens_Pos.Pos_Select .x + X_offs
+		else
+			step[SC].E = Sens_Pos.Pos_Select .y + Y_offs
+		ENDIF
+		
+		--changing Profile length and endpoints
+		Pleng=ABS(proE-step[SC].E)
+		X_end=Sens_Pos.Pos_Select .x
+		Y_end=Sens_Pos.Pos_Select .y
+		short_prof = TRUE
+		
+		Set_RReg(60,X_end)
+		Set_RReg(61,Y_end)
+		
+		--disable PB welding of very short profiles
+		IF Pleng<150 THEN
+			TaskList1[17].Enabled = FALSE
+		ENDIF
+		
+	ENDIF
+	
+		
+	--*************************** Flush ****************************
+	IF (edge_type = 'Flush') THEN
+	-- just continue
+	ENDIF
+	
+	
+	--***************************  Front ****************************
+	IF  (edge_type = 'Front') THEN
+		ErrorNo = 501         -- Critical point error
+		ErrorReq = TRUE	
+		ABORT
+	ENDIF	
+	
+	
+ENDIF
+
+
+--################################################--
+--*************** Determin PF_High weldings*****************	
+--################################################--
+	
+	IF flange=1 THEN -- flatbar og backside
+		IF opro_flange=1 THEN -- flatbar and backside
+			IF ((prohei<Oprohei)) THEN 
+				PF_high=1 
+			else
+				PF_high=5
+			ENDIF
+			IF ((ABS(prohei-Oprohei)<15) AND (End_type=2))THEN -- end_type<>2 to handle types in spain
+				PF_high=1 
+			ENDIF
+			
+			IF ((ABS(prohei-Oprohei)<10))THEN -- if profiles are all most the same... close over profile
+				PF_high=1
+			ENDIF
+			
+		ENDIF
+		
+		IF opro_flange=2 THEN -- bulb, L/T frontside
+			IF ((prohei<Oprohei) AND (FlangeSW<75)) THEN 
+				PF_high=1
+			else
+				PF_high=4
+			ENDIF
+		ENDIF
+		
+	ENDIF
+			
+	IF flange=2 THEN -- bulb, L/T frontside
+		IF opro_flange=1 THEN -- flatbar and backside
+			IF prohei<Oprohei THEN 
+				PF_high=4
+			else
+				PF_high=5
+			ENDIF
+		ENDIF
+		IF opro_flange=2 THEN -- bulb, L/T frontside
+			IF prohei<Oprohei THEN 
+				PF_high=4
+			else
+				PF_high=4
+			ENDIF
+		ENDIF
+	ENDIF
+	
+	--Overruling for penetrating profiles
+	IF ((step[8+SO].enbl=TRUE) AND (step[8+SO].text<>'Flush')) THEN 
+		PF_high=2
+	ENDIF
+		--
+	IF ((step[9+SO].enbl=TRUE) AND (step[9+SO].text<>'Flush')) THEN 
+		PF_high=2
+	ENDIF
+
+	-- Check that we have both PF_low and PF_high
+	IF ((pf_low<>0) AND (PF_high=0)) THEN 
+		errorno=501
+		errorreq=TRUE
+		ABORT
+	ENDIF	
+
+
+--################################################--
+	-- Ending
+--################################################--
+
+endlabel::
+
+--################################################--
+	-- Setting and information registers
+--################################################--
+--****************** Setting Values to active robot ******************		
+
+	IF robot = 1 THEN	
+	-- Saving values for R1
+		ProX1=ProX
+		ProY1=ProY
+		ProZ1=ProZ
+		
+		ProS1=ProS
+		ProE1=ProE
+		ProWS1=ProWS
+		ProWE1=ProWE
+		
+		prohei1=prohei
+		Oprohei1=Oprohei
+		
+		-- Registers TP info	
+		
+		
+		Opro_flange1=Opro_flange
+		flangeSW1=flangeSW
+			
+		Set_Ireg(252,Flange1)
+		Set_Ireg(253,Opro_flange1)		
+		
+		end_type1=end_type
+		Set_Ireg(254,End_Type)
+		
+		PF_low1=PF_low
+		Set_Ireg(255,PF_low)
+		
+		PF_High1=PF_High
+		Set_Ireg(256,PF_high1)
+		
+		web_type1=web_type
+		Set_Ireg(257,Web_Type)
+		
+	
+		Set_Ireg(259,low_angS1)
+		
+		-- handling offsets between robots
+	IF (((SE=-1) AND (swap_R_start<>3)) OR ((SE=1) AND (swap_R_end<>3))) THEN 
+			
+			ProZ3=ProZ1+Get_RReg(169)
+					
+			IF XY_dir=1 THEN -- if X-direction
+				ProE3=ProE1+Get_RReg(167)
+				ProS3=ProS1+Get_RReg(168)
+				
+			else
+				ProE3=ProE1+Get_RReg(168)
+				ProS3=ProS1+Get_RReg(167)
+		
+			ENDIF
+				
+				ProX=ProX3
+				ProY=ProY3
+				ProZ=ProZ3
+				Zbase=ProZ
+				
+				ProS=ProS3
+				ProE=ProE3
+			
+		ENDIF
+		
+	else
+	-- R3 normal run
+	
+		
+	-- Saving values for R3
+	IF no_PF=FALSE THEN -- only if we did sense alpt1 with R3
+		ProX3=ProX
+		ProY3=ProY
+		ProZ3=ProZ
+		
+		ProS3=ProS
+		ProE3=ProE
+	endif
+		
+		ProWS3=ProWS
+		ProWE3=ProWE
+	
+		
+		
+		prohei3=prohei
+		Oprohei3=Oprohei
+		
+			--Using prohei from flange side
+		IF (get_IReg(290)=0) THEN 
+			IF flange1=2 THEN 
+				prohei=prohei1
+			ENDIF
+			IF flange3=2 THEN 
+				prohei=prohei3
+			ENDIF
+		ENDIF
+		-- Rewriting prohei from scanning
+		profile[Jobno].top1=prohei
+		profile[Jobno].top2=prohei
+		
+		Opro_flange3=Opro_flange
+		flangeSW3=flangeSW
+		
+		-- Registers TP info
+		Set_Ireg(262,Flange3)
+		
+		Set_Ireg(263,Opro_flange3)	
+				
+		end_type3=end_type
+		Set_Ireg(264,End_Type)
+		
+		PF_low3=PF_low
+		Set_Ireg(265,PF_low)
+		
+		PF_High3=PF_High
+		Set_Ireg(266,PF_high)
+		
+		web_type3=web_type
+		Set_Ireg(267,Web_Type)
+		
+		
+		Set_Ireg(269,low_angS3)
+		
+	ENDIF		
+		
+	Set_Ireg(258,low_ang1)
+	Set_Ireg(268,low_ang3)
+		
+		--Disabling tasks for end of  short profile
+		IF short_prof = TRUE THEN
+			FOR i = 19 TO 30 DO
+			            TaskList1[i].Enabled = FALSE
+			            TaskList3[i].Enabled = FALSE
+			ENDFOR
+		ENDIF
+
+
+
+END Stepmachine
+
+
+-----------------------------------------------------------------------------------------
+-- Inrotech begins
+-----------------------------------------------------------------------------------------
+BEGIN
+-- init 
+
+-- Initialize system vars
+	$GROUP[1].$UFRAME = $MNUFRAME[1, 1] 
+	$GROUP[1].$UTOOL = $MNUTOOL[1, 3]
+	$GROUP[3].$UFRAME = $MNUFRAME[3, 1] 
+	$GROUP[3].$UTOOL = $MNUTOOL[3, 3]
+	Set_IReg(96,1) -- setting userframe for TP program
+	
+	$GROUP[1].$USE_WJTURNS  =  TRUE
+	$GROUP[1].$USE_CONFIG  =  TRUE
+	$GROUP[1].$USE_TURNS    =  TRUE
+	$GROUP[1].$ORIENT_TYPE = RSWORLD  -- RSWORLD , AESWORLD , WRISTJOINT
+	
+	$GROUP[3].$USE_WJTURNS  =  TRUE
+	$GROUP[3].$USE_CONFIG  =  TRUE
+	$GROUP[3].$USE_TURNS    =  TRUE
+	$GROUP[3].$ORIENT_TYPE = RSWORLD  -- RSWORLD , AESWORLD , WRISTJOINT
+	
+	$MOTYPE = LINEAR  -- LINEAR
+	$TERMTYPE =  COARSE    
+	
+       -- FINE - robot stops BEFORE beginning next motion
+       -- COARSE - moves TO Pos AND stops BEFORE next motion
+       -- NOSETTLE - moves CLOSE TO Pos but does NOT STOP BEFORE next motion
+       -- NODECEL - moves past Pos ON way TO next Pos without deceleration
+       
+      -- IF (CheckLaw <> 329) THEN -- licens Check
+       	--	ABORT
+       --ENDIF
+		
+	Actstep=0
+
+	SensSpeed = 249
+	MoveSpeed = 249
+
+--	RG_side = Get_IReg(38)
+	--WeldDir  = Get_IReg(39)		
+
+	--*********************************************************
+	--****************** Setting Userframe 2 ***************
+	--*********************************************************
+	
+		--- Angle of profile
+	PDy=ABS(Y_end-Y_start)
+		
+	IF XY_dir = 1 THEN
+		-- X-profiles
+			IF X_start<X_end THEN -- correct fortegn
+			Pang=ASIN((Y_start-Y_end)/Pleng)
+		else
+			Pang=ASIN((Y_end-Y_start)/Pleng)
+		ENDIF
+	else
+		-- Y-profiles
+		IF Y_start<Y_end THEN -- correct fortegn
+			Pang=ASIN((X_end-X_start)/Pleng)
+		else
+			Pang=ASIN((X_start-X_end)/Pleng)
+		ENDIF
+	ENDIF
+	
+	set_RReg(80,Pang)
+	PangPos=ABS(Pang) -- positive angle
+	
+	mp[1]=$MNUFRAME[1,1]
+	mp[1].r=mp[1].r+Pang
+	$MNUFRAME[1,2]=mp[1]
+	
+	mp[1]=$MNUFRAME[3,1]
+	mp[1].r=mp[1].r+Pang
+	$MNUFRAME[3,2]=mp[1]
+
+		
+	
+-----------------------------------------------------------------------------------------
+-- Makes it possible to call inrotech from TP programs
+-----------------------------------------------------------------------------------------
+	GET_TPE_PRM(1, 1, TP_parm_Int, TP_parmREAL, TP_parm_Str, StatIn)
+	
+	IF (ABS(TP_parm_Int) = 1) THEN
+		SO = 30+30*TP_parm_Int
+		RL_side=TP_parm_Int
+		StepMachine 
+		ABORT
+	ENDIF
+
+								
+-----------------------------------------------------------------------------------------
+--High profile reg reset
+-----------------------------------------------------------------------------------------	
+Set_IReg(161,0)
+	
+
+ -- **************************************************************
+--- intializing
+---**************************************************************
+	Set_IReg(75,0) -- R1 -> Start R3 reset
+	
+	-- Nulling min plate thickness
+	MinThick = 9999
+	mir_off = FALSE -- if mirror is accepted or not in analog sensing
+	mir_long=FALSE -- mirror long dis 450 not accepted
+	mir_short=FALSE -- no short mirror
+
+-- Seeting information for  Profile start and end
+
+	X_start =Get_RReg(58)
+	Y_start =Get_RReg(59)
+	X_end =Get_RReg(60)
+	Y_end =Get_rReg(61)
+	
+	
+	-- TEMP
+	XY_dir=get_IReg(81) -- maybe temp
+	X_dir=get_IReg(82) -- maybe temp
+	Y_dir=get_IReg(83) -- maybe temp
+	
+	-- TEMP
+	
+	
+	IF (SE=-1) THEN
+		SideP=SideP1
+	else
+		SideP=SideP2
+	ENDIF 	
+		
+
+---**************************************************************
+--Handle if Robot 1 or Robot 3 should sensedfirst 
+---**************************************************************
+
+--Profile direction. XY used in funclib
+IF XY_dir=1 THEN
+	XY=1
+else 
+	XY=0
+ENDIF
+ 
+---**************************************************************
+-- Call StepMachine for Robot 1 
+---**************************************************************
+
+-- Active robot + sensor
+IF (((TaskName1='ALPT1') AND (Pretask1=TRUE))) THEN -- if robot 1 is running the program
+	
+Robot=1
+RD=1*Get_IReg(179) -- robot direction/swap
+side12=1
+I_SLaser = I_SLaser1
+O_SLaser = O_SLaser1
+IA_SLaser = IA_SLaser1
+
+--Handle swap robot
+ 
+	swap_robot=0
+	Set_IReg(290,0)
+	
+	--if normal run
+	IF ((SE=-1) AND (swap_r_start=1)) THEN 
+		 swap_robot=-1
+		Set_IReg(290,-1)
+	ENDIF	
+	IF ((SE=1) AND (swap_r_end=1)) THEN 
+		 swap_robot=-1
+		Set_IReg(290,-1)
+	ENDIF	
+	
+	IF ((tasknr1=11) OR (tasknr1=25)) THEN 
+		swap_robot=1
+		Set_IReg(290,1)
+	ENDIF
+	
+	
+
+	RDO[RO_LaserLit1] = TRUE	-- Open laserhouse
+	DOUT[O_SLaser1] = TRUE	-- Power on laser
+		
+	SO = 30+30*RD
+	
+	Geo_project -- getting project specific items
+	
+	NB_Check -- checking profiles behind
+	stepMachine
+
+	
+ENDIF
+
+---**************************************************************
+-- Call StepMachine For Robot 3 
+---**************************************************************
+-- Active robot
+IF(((TaskName3='ALPT1') AND (Pretask3=TRUE)))THEN -- if robot 3 is running the program
+ --Active robot
+Robot=3
+RD=-1*Get_IReg(179) -- robot direction/swap
+side12=2
+I_SLaser = I_Slaser2
+O_SLaser = O_SLaser2
+IA_SLaser = IA_SLaser2
+
+--IF prohei <400 THEN 
+	RDO[RO_LaserLit2] = TRUE	-- Open laserhouse
+	DOUT[O_SLaser2] = TRUE	-- Power on laser
+
+-- Setting step range
+	SO = 30+30*RD
+	
+-- Setting swap robot
+	swap_robot=0
+	Set_IReg(290,0)
+	
+	--if normal run
+	IF ((SE=-1) AND (swap_r_start=3)) THEN 
+		 swap_robot=-3
+		Set_IReg(290,-3)
+	ENDIF	
+	IF ((SE=1) AND (swap_r_end=3)) THEN 
+		 swap_robot=-3
+		Set_IReg(290,-3)
+	ENDIF	
+	
+	-- if swap run
+	IF ((tasknr3=11) OR (tasknr3=25)) THEN 
+		swap_robot=3
+		Set_IReg(290,3)
+	ENDIF
+	
+
+		
+		--Set_RReg(167,1234)--temp
+		
+		--IF (Get_RReg(167)=1234) THEN 
+			---- if not calibrated, get raw values from R1
+				--ProX=ProX1
+				--ProY=ProY1
+				--ProZ=ProZ1
+				--
+				--ProS=ProS1
+				--ProE=ProE1
+		--ENDIF
+		
+		-- offseting from Side profile
+		E_offs=0
+		S_offs= Get_RReg(14) -- getting profile thickness
+		Dir_func
+		
+		IF XY_dir = 1 THEN
+			ProS=ProY+Y_offs
+		else
+			ProS=ProX+X_offs
+		ENDIF
+	
+				
+		Geo_project -- getting project specific items
+		
+		NB_Check -- checking profiles behind
+		stepMachine -- sensing
+		
+		
+--else
+	--DELAY 2000
+
+--ENDIF
+
+ENDIF
+
+	------------------------------------------------------------------------------------
+	-- Turn off lasers
+	------------------------------------------------------------------------------------
+	--RDO[RO_LaserLit1] = FALSE	
+	--DOUT[O_SLaser1] = FALSE
+	--RDO[RO_LaserLit2] = FALSE	
+	--DOUT[O_SLaser2] = FALSE
+	
+  	SET_IREG(150,0)-- Task afsluttet
+  	
+END ALPT1

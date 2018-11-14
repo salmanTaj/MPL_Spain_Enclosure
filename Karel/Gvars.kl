@@ -1,0 +1,70 @@
+-- ***********************************************************************************************
+-- Global variables
+-- ***********************************************************************************************
+ErrInt1		FROM TASKMAN:INTEGER    		-- Func ERR_DATA : Returned error_code
+ErrInt2		FROM TASKMAN:INTEGER       	-- Func ERR_DATA : Returned cause_code
+ErrInt3 		FROM TASKMAN:INTEGER       	-- Func ERR_DATA : Returned time when error_code was posted
+ErrInt4		FROM TASKMAN:INTEGER       	-- Func ERR_DATA : Returned severity (0=warning, 1=PAUSE, 2=ABORT)
+ErrorNO		FROM TASKMAN:INTEGER		-- Interval value for Inrotechs errors
+ErrorReq		FROM TASKMAN:BOOLEAN		--To trigger the errorhandling in Taskman from anywhere
+ErrorCnt		FROM TASKMAN:INTEGER		-- Error counter for auto retry sensing 
+SensActive		FROM TASKMAN:BOOLEAN
+ErrStr1		FROM TASKMAN:STRING[40]	-- Func ERR_DATA : Returned Error_string
+ErrStr2		FROM TASKMAN:STRING[40]	-- Func ERR_DATA : Returned Cause_string
+ErrStr3 		FROM TASKMAN:STRING[12]	-- Func ERR_DATA : Returned Prog_name
+TPSwich		FROM TASKMAN:BOOLEAN		-- keeping track of the enable/disable switch on TP
+TPTrack		FROM TASKMAN:BOOLEAN		-- keeping track the last checked state of TPSwitch
+weld_time,total_time, stop_time, log_time	FROM TASKMAN:INTEGER  -- timers to keep track of effeciency
+weld_Tcnt, total_Tcnt, stop_Tcnt		FROM TASKMAN:REAL  -- timers to keep track of effeciency
+logstate  FROM TASKMAN:INTEGER  -- state for logging file
+PanelState	FROM TASKMAN:INTEGER					--Sets State for Panel
+State			FROM TASKMAN:INTEGER				-- Stepmachine State (old toplevel,lowlevel)
+
+-- ***********************************************************************************************
+-- I/O
+-- ***********************************************************************************************
+
+I_SLaser ,I_SLaser1,I_SLaser2		FROM TASKMAN:INTEGER			-- Sensing Laser input Input
+RO_AirCool, RO_airCool1, RO_airCool2	FROM TASKMAN:INTEGER			-- Activate AirCooling
+RO_LaserLit,RO_LaserLit1,RO_LaserLit2	FROM TASKMAN:INTEGER			-- Open/close laser lit
+O_SLaser,O_SLaser1,O_SLaser2 		FROM TASKMAN:INTEGER              	-- Enable sense laser
+O_scanner								FROM TASKMAN:INTEGER              	-- Turn ON scanner
+IA_SLaser, IA_SLaser1,IA_SLaser2		FROM TASKMAN:INTEGER			-- Signal from sensing laser
+O_SensEnd					FROM TASKMAN:INTEGER			-- Sens motion ended
+O_SensStop					FROM TASKMAN:INTEGER			-- Sens motion ended
+O_R1, O_R3					FROM TASKMAN:INTEGER			-- Robot active token
+O_Clean1, O_Clean3				FROM TASKMAN:INTEGER			-- Cleaning air
+O_scan								FROM TASKMAN:INTEGER -- Power scanners
+
+-- DIGITAL I/O external (Signal ligth)
+--O_Sou1		FROM TASKMAN:INTEGER			-- Sound 1
+--O_Sou2		FROM TASKMAN:INTEGER			-- Sound 2
+O_Sgl1			FROM TASKMAN:INTEGER			-- Signal light green		
+O_Syl1			FROM TASKMAN:INTEGER			-- Signal light yellow
+O_Srl1			FROM TASKMAN:INTEGER			-- Signal light red
+O_Sgl2			FROM TASKMAN:INTEGER			-- Signal light green		
+O_Syl2			FROM TASKMAN:INTEGER			-- Signal light yellow
+O_Srl2			FROM TASKMAN:INTEGER			-- Signal light red
+
+-- Welding internal
+O_WeldEnb		FROM TASKMAN:INTEGER			-- Welding on / off
+O_TouchSens1, O_TouchSens2			FROM TASKMAN:INTEGER 	-- Enable touch sensor	
+--I_TouchSig1, I_TouchSig3 		FROM TASKMAN:INTEGER		-- Signal from touch sensor
+I_ARC_R1,I_ARC_R3		FROM TASKMAN:INTEGER			-- Arc ON signals
+
+-- System internal
+O_Imstp			FROM TASKMAN:INTEGER			-- IMSTP
+O_Hold			FROM TASKMAN:INTEGER			-- System hold	
+O_FaultRes			FROM TASKMAN:INTEGER			-- Reset system fault	
+O_Start				FROM TASKMAN:INTEGER			-- Start cmd, use after fault reset
+O_SysFault			FROM TASKMAN:INTEGER			-- Signal from fanuc - system in fault
+
+
+-- ***********************************************************************************************
+-- Motion
+-- ***********************************************************************************************
+--AnSearch 	FROM MOTION:BOOLEAN		-- analog søgning i stedet for digital
+--MoveSpeed	FROM MOTION:INTEGER
+--Search_Sig    	FROM MOTION:BOOLEAN
+--SensAccel     	FROM MOTION:INTEGER
+--SensSpeed	FROM MOTION:INTEGER		-- Defining robot sensing speed

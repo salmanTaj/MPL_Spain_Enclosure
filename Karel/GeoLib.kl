@@ -1,0 +1,998 @@
+PROGRAM GeoLib
+	
+	%COMMENT = 'Vers. 1.1-rafa'
+	%NOPAUSESHFT
+	%NOPAUSE = ERROR + TPENABLE
+	%NOABORT = ERROR 
+	%NOLOCKGROUP
+
+TYPE
+	%INCLUDE Types
+	
+VAR
+	%INCLUDE Gvars
+	%INCLUDE MPL_vars
+	STATUS  		FROM FunktLib: INTEGER 		-- The status of the operation of GET_REG
+	
+	i:INTEGER
+	real_tmp: REAL
+	Bool_tmp: BOOLEAN
+	
+	
+--
+--
+ROUTINE Feat_Tbl (FeatNr :INTEGER) FROM GeoLib -- Feature information and steps
+ROUTINE ProfileH (H_meas: REAL) : INTEGER FROM GeoLib -- Profile Heigth
+ROUTINE ProThick : REAL FROM GeoLib -- Min. plate thickness
+
+ROUTINE Geo_Scal : REAL FROM GeoLib -- Scallop size
+ROUTINE Geo_CutRad  : REAL FROM GeoLib -- Radius
+ROUTINE Geo_NWTH  : REAL FROM GeoLib -- NWTCP Heigth
+ROUTINE Geo_NWTW  : REAL FROM GeoLib -- NWTCP Width
+ROUTINE Geo_NWTRad  : REAL FROM GeoLib -- NWTCP Radius
+
+ROUTINE Geo_WTH  : REAL FROM GeoLib -- WTCP Heigth
+ROUTINE Geo_WTW  : REAL FROM GeoLib -- WTCP Width
+ROUTINE Geo_WTRad  : REAL FROM GeoLib -- WTCP Radius
+
+ROUTINE Geo_ELCPH : REAL FROM GeoLib -- ELCP Heigth
+ROUTINE Geo_ELCPR : REAL FROM GeoLib -- ELCP Rad
+
+ROUTINE Geo_Project FROM GeoLib -- Project specifik things
+
+ROUTINE NB_check FROM GeoLib -- checking neighbour profiles
+--ROUTINE Dis_NextX FROM Geolib-- distance to next X profile, used in fold/unfold
+ROUTINE SideLength FROM GeoLib -- gettting length of actual side profile
+
+
+ROUTINE Get_IReg (Number : INTEGER) :INTEGER FROM FunktLib
+ROUTINE Get_RReg (Number : INTEGER) :REAL FROM FunktLib
+ROUTINE Set_IReg (Number : INTEGER; Value : INTEGER) FROM FunktLib
+ROUTINE Set_RReg (Number : INTEGER; Value : REAL) FROM FunktLib
+ROUTINE Hvis (Var1 : REAL; Compare : STRING; Var2 : REAL ; Stp_True : INTEGER; Stp_False : INTEGER) :INTEGER FROM Funktlib
+ROUTINE Act_Pos(MPNr   : INTEGER;rob : INTEGER) FROM FunktLib	-- put aktuelle position i MP [nummer]
+
+
+
+--***********************************************************************************************
+-- WeldTbl
+-- Initialize PG_Names & assign programs to feature ID's
+--***********************************************************************************************
+
+ROUTINE Feat_Tbl -- (FeatNr :INTEGER) FROM GeoLib
+BEGIN
+	
+
+		 
+	SELECT end_type OF
+		
+		CASE (1):
+			step[31+SO].enbl=TRUE -- Sp1
+			
+		CASE (2):
+			step[35+SO].enbl=TRUE --sp2
+		
+		CASE (3):
+			step[38+SO].enbl=TRUE --sp 2
+				
+		CASE (4):
+			step[38+SO].enbl=TRUE --sp2
+		
+		CASE (5): -- no end of profile
+			step[40+SO].enbl=TRUE --sp1
+			
+		CASE (6): -- overlap
+			step[40+SO].enbl=TRUE -- overlap
+			
+		CASE (7): -- scallop on free end profile
+			step[38+SO].enbl=TRUE
+			
+		CASE (8): -- gap ON web
+			step[31+SO].enbl=TRUE
+			
+			
+	ENDSELECT
+	
+	-- Disabling PF welding depending on length	
+	IF ((OProHei < 90) AND (PF_low=2)) THEN
+		--PF_low=0
+	ENDIF
+	
+		-- skip Pf welding if Y-profile and there is a profile behind
+	NB_Check -- checking profiles behind
+	
+	IF NB_back=10 THEN 
+		PF_low=0
+		PF_high=0
+	ENDIF
+	
+	-- temp for X -profiles
+	--IF xy_dir=1 THEN 
+		--IF NB_back=5 THEN 
+			--PF_low=0
+			--PF_high=0
+		--ENDIF
+	--ENDIF
+	
+	SELECT PF_low OF
+		CASE (0):
+			PF_high=0
+			-- disable task for PF welding
+			IF SE=-1 THEN-- start of profile 
+				IF robot=1 THEN 
+					TaskList1[7].enabled = FALSE
+					TaskList1[13].enabled = FALSE -- swap robot
+				else
+					TaskList3[8].enabled = FALSE
+					TaskList3[13].enabled = FALSE -- swap robot
+				ENDIF
+			else -- end of profile
+				IF robot=1 THEN 
+					TaskList1[22].enabled = FALSE
+					TaskList1[28].enabled = FALSE -- swap robot
+				else
+					TaskList3[23].enabled = FALSE
+					TaskList3[28].enabled = FALSE -- swap robot
+				ENDIF
+			ENDIF
+		
+		CASE (1):
+			step[31+SO].enbl=TRUE
+			
+		CASE (2):
+			step[36+SO].enbl=TRUE
+	ENDSELECT
+					
+	SELECT PF_High OF
+		CASE (0):
+			-- disable task
+		
+		CASE (1):
+			step[32+SO].enbl=TRUE
+			
+		CASE (2):
+			step[37+SO].enbl=TRUE
+			IF Opro_flange = 2 THEN 
+				step[37+SO].enbl=FALSE
+				step[42+SO].enbl=TRUE
+			ENDIF
+				
+		CASE (3):
+			step[46+SO].enbl=TRUE
+		CASE (4):
+			step[46+SO].enbl=TRUE
+			
+		CASE (5):
+			step[32+SO].enbl=TRUE
+			
+	ENDSELECT
+	
+	
+	SELECT web_type OF
+			
+		CASE (0):
+				-- see after endselect
+		CASE (1):
+			-- point already sensed
+			--step[31+SO].enbl=TRUE -- 
+				step[41+SO].enbl=TRUE -- end point
+		
+		CASE (2):-- scallop on web
+			step[35+SO].enbl=TRUE --sp12
+			step[41+SO].enbl=TRUE-- end point
+				
+		CASE (4): -- web end
+				step[41+SO].enbl=TRUE-- end point
+				step[49+SO].enbl=TRUE -- 
+				
+		CASE (5):
+				step[39+SO].enbl=TRUE
+				--PAUSE
+				-- point may alreday be sensed
+				step[41+SO].enbl=TRUE -- end point 
+				
+				IF ((end_type = 2) AND (PF_low<>0)) THEN
+					step[39+SO].enbl=FALSE
+				ENDIF
+				
+				IF (end_type = 4) THEN
+					step[39+SO].enbl=TRUE
+				ENDIF
+				
+				IF SkipEnd=TRUE THEN 
+					step[43+SO].enbl=true
+				ENDIF
+	
+	ENDSELECT
+	
+	-- checking on web length
+	sidelength
+	
+	IF ((web_type=0) OR (act_sideL < 150)) THEN 
+			-- disable task for web welding
+			IF SE=-1 THEN-- start of profile 
+				IF robot=1 THEN 
+					TaskList1[8].enabled = FALSE
+					TaskList1[14].enabled = FALSE
+				else
+					TaskList3[7].enabled = FALSE
+					TaskList3[14].enabled = FALSE
+				ENDIF
+			else -- end of profile
+				IF robot=1 THEN 
+					TaskList1[23].enabled = FALSE
+					TaskList1[29].enabled = FALSE
+				else
+					TaskList3[22].enabled = FALSE
+					TaskList3[29].enabled = FALSE
+				ENDIF
+			ENDIF
+			-- disable task
+	endif
+	
+	--Swap robots
+	IF swap_robot<>0 THEN 
+		step[45+SO].enbl=TRUE
+	ENDIF
+	
+		--SELECT  Get_IReg (110)  OF		
+			--CASE (1):
+				--Set_Ireg(58, FeatNr)-- Left side
+				--TaskList[6].Name = PG_Names[1]-- og lægger svejseprogram navne ind i de respektive tasks
+				--IF PG_Names[1]='' THEN -- disable if no program
+					--TaskList[6].enabled = FALSE
+				--ENDIF	
+				--
+				--TaskList[7].Name = PG_Names[2]
+				--IF PG_Names[2]='' THEN -- disable if no program
+					--TaskList[7].enabled = FALSE
+				--ENDIF
+			--CASE (-1):
+				--
+				--Set_Ireg(59, FeatNr) -- Right side
+				--TaskList[10].Name = PG_Names[1]		-- og lægger svejseprogram navne ind i de respektive tasks
+				--IF PG_Names[1]='' THEN -- disable if no program
+					--TaskList[10].enabled = FALSE
+				--ENDIF
+				--TaskList[11].Name = PG_Names[2]
+				--IF PG_Names[2]='' THEN -- disable if no program
+					--TaskList[11].enabled = FALSE
+				--ENDIF		
+			--else:
+				--ErrorNo = 901         -- programnavn findes ikke
+				--ErrorReq = TRUE
+				----PAUSE
+		--ENDSELECT
+	
+	
+END Feat_Tbl
+
+--
+--***********************************************************************************************
+-- Project specifik things       
+--***********************************************************************************************
+
+ROUTINE Geo_project
+VAR
+Project  :INTEGER	
+
+BEGIN
+Narrow_edge=FALSE
+OverLap=FALSE
+small_Scal=FALSE
+var_heigth=FALSE
+No_hei_sens=FALSE
+no_pf = FALSE
+
+
+ 
+	Project= Get_IReg(495)
+	
+	IF Project=21226 THEN --china
+		No_hei_sens=TRUE
+		no_pf = TRUE
+	ENDIF
+	
+	IF Project=21232 THEN --Bilbao
+		Narrow_edge=TRUE
+		OverLap=TRUE	
+		small_Scal=TRUE
+		var_heigth=true -- meassure heigth in both ends
+	ENDIF 
+	
+			
+END Geo_Project
+
+--***********************************************************************************************
+-- Profile heigth
+-- converting meassured heigth to theoredical heigth
+--***********************************************************************************************
+ROUTINE ProfileH --(H_mes: REAL; Prohei: REAL) FROM GeoLib --Profile Heigth
+
+BEGIN
+	prohei = 0
+	
+	
+	IF H_Meas < 45 THEN -- too low value
+		ErrorNo = 525
+		ErrorReq = TRUE  
+		PAUSE
+	ENDIF
+	
+	IF (H_Meas >50) AND (H_Meas < 70) THEN
+		RETURN(60)
+	ENDIF 
+	
+	IF (H_Meas >70) AND (H_Meas < 90) THEN
+		RETURN(80)
+	ENDIF	
+
+	IF (H_Meas > 90) AND (H_Meas < 110) THEN
+		RETURN(100)
+	ENDIF	
+	
+	IF (H_Meas >110) AND (H_Meas < 130) THEN
+		RETURN(120)
+	ENDIF	
+	
+	IF (H_Meas >130) AND (H_Meas < 150) THEN
+		RETURN(140)
+	ENDIF
+	
+	IF (H_Meas >150) AND (H_Meas < 170) THEN
+		RETURN(160)
+	ENDIF
+	
+	IF (H_Meas >170) AND (H_Meas < 190) THEN
+		RETURN(180)
+	ENDIF
+		
+	IF (H_Meas >190) AND (H_Meas < 210) THEN
+		RETURN(200)
+	ENDIF	
+	
+	IF (H_Meas >210) AND (H_Meas < 240) THEN
+		RETURN(220)
+	ENDIF
+		
+	IF (H_Meas >240) THEN -- girder
+		RETURN(260)
+	ENDIF
+	
+	IF  (H_Meas = 0)  THEN
+		ErrorNo = 901         -- programnavn findes ikke
+		ErrorReq = TRUE
+		PAUSE
+	ENDIF
+	
+END ProfileH
+
+
+--***********************************************************************************************
+-- Scallop size
+-- get scallop size from Profile heigth
+--***********************************************************************************************
+ROUTINE Geo_Scal-- Scallop size
+BEGIN
+		IF Prohei =  60 THEN	
+			RETURN(10)
+		ENDIF
+		IF (Prohei > 60) AND (ProHei<=120) THEN
+			RETURN(20)
+		ENDIF
+		
+		IF (Prohei > 120) AND (ProHei<=260)THEN
+			IF Probulb=10 THEN -- girder
+				RETURN(40) 
+			ENDIF
+			RETURN(25)
+			else
+				ErrorNo = 901         -- Profile Height does not exsist
+				ErrorReq = TRUE
+				PAUSE
+		ENDIF
+END Geo_Scal
+
+--***********************************************************************************************
+-- Radius size
+-- get scallop size from Profile heigth
+--***********************************************************************************************
+ROUTINE Geo_CutRad-- Scallop size
+BEGIN
+		IF Prohei =  60 THEN	
+			RETURN(10)
+		endif
+		
+		IF (Prohei > 60) AND (ProHei<=120) THEN
+			RETURN(20)
+		ENDIF
+				
+		IF (Prohei > 120) AND (ProHei<=260) THEN
+			RETURN(25)
+			else
+				ErrorNo = 901         -- Profile Height does not exsist
+				ErrorReq = TRUE
+				PAUSE
+		ENDIF
+END Geo_CutRad
+
+
+--***********************************************************************************************
+-- Non water tigth CP heigth
+-- get size from Profile heigth
+--***********************************************************************************************
+--ROUTINE Geo_NWTH-- 
+--BEGIN
+	--SELECT  Prohei  OF		
+			--CASE (60):
+				--RETURN(40)
+			--
+			--CASE (80):
+				--RETURN(57)
+			--
+			--CASE (100):
+				--RETURN(71)
+				--
+			--CASE (120):
+				--RETURN(86)
+				--
+			--CASE (140):
+				--RETURN(93)
+			--
+			--CASE (160):
+				--RETURN(108)
+			--
+			--CASE (180):
+				--RETURN(125)
+				--
+			--CASE (200):
+				--RETURN(141)
+				--
+			--CASE (220):
+				--RETURN(156)
+						--
+			--CASE (260):
+				--RETURN(190)
+				--
+	--ENDSELECT
+--END Geo_NWTH
+--
+
+--***********************************************************************************************
+-- Non water tigth CP width
+-- get size from Profile heigth
+--***********************************************************************************************
+--ROUTINE Geo_NWTW-- 
+--BEGIN
+	--SELECT  Prohei  OF		
+			--CASE (60):
+				--RETURN(60)
+			--
+			--CASE (80):
+				--RETURN(64)
+			--
+			--CASE (100):
+				--RETURN(66)
+				--
+			--CASE (120):
+				--RETURN(67)
+				--
+			--CASE (140):
+				--RETURN(69)
+			--
+			--CASE (160):
+				--RETURN(77)
+			--
+			--CASE (180):
+				--RETURN(80)
+				--
+			--CASE (200):
+				--RETURN(83)
+				--
+			--CASE (220):
+				--RETURN(86)
+						--
+			--CASE (260):
+				--RETURN(92)
+				--
+	--ENDSELECT
+--END Geo_NWTW
+
+
+--***********************************************************************************************
+-- NWT Radius size
+-- get Radius  size from Profile heigth
+--***********************************************************************************************
+ROUTINE Geo_NWTRad-- Radius size
+BEGIN
+				RETURN(20)
+			
+END Geo_NWTRad
+
+
+--***********************************************************************************************
+-- Water tigth CP heigth
+-- get size from Profile heigth
+--***********************************************************************************************
+--ROUTINE Geo_WTH-- 
+--BEGIN
+	--SELECT  Prohei  OF		
+			--CASE (60):
+				--RETURN(115)
+			--
+			--CASE (80):
+				--RETURN(135)
+			--
+			--CASE (100):
+				--RETURN(155)
+				--
+			--CASE (120):
+				--RETURN(175)
+				--
+			--CASE (140):
+				--RETURN(195)
+			--
+			--CASE (160):
+				--RETURN(215)
+			--
+			--CASE (180):
+				--RETURN(235)
+				--
+			--CASE (200):
+				--RETURN(255)
+				--
+			--CASE (220):
+				--RETURN(275)
+						--
+			--CASE (260):
+				--ErrorNo = 901         -- Type does not exsist for this profile
+				--ErrorReq = TRUE
+				--PAUSE
+				--
+	--ENDSELECT
+--END Geo_WTH
+--
+--
+----***********************************************************************************************
+---- Water tigth CP width
+---- get size from Profile heigth
+----***********************************************************************************************
+--ROUTINE Geo_WTW-- 
+--BEGIN
+	--SELECT  Prohei  OF		
+			--CASE (60):
+				--IF Probulb = 1 then
+					--RETURN(74)
+				--else
+					--RETURN(55)
+				--endif
+				--
+			--CASE (80):
+			--IF Probulb = 1 THEN
+					--RETURN(74)
+				--else
+					--RETURN(55)
+				--endif
+			--
+			--CASE (100):
+				--IF Probulb = 1 THEN
+					--RETURN(76)
+				--else
+					--RETURN(55)
+				--endif
+				--
+			--CASE (120):
+					--IF Probulb = 1 THEN
+					--RETURN(80)
+				--else
+					--RETURN(55)
+				--endif
+				--
+			--CASE (140):
+					--IF Probulb = 1 THEN
+					--RETURN(81)
+				--else
+					--RETURN(55)
+				--endif
+			--
+			--CASE (160):
+					--IF Probulb = 1 THEN
+					--RETURN(84)
+				--else
+					--RETURN(55)
+				--endif
+			--
+			--CASE (180):
+			--IF Probulb = 1 THEN
+					--RETURN(88)
+				--else
+					--RETURN(55)
+				--endif
+				--
+			--CASE (200):
+				--IF Probulb = 1 THEN
+					--RETURN(92)
+				--else
+					--RETURN(55)
+				--endif
+				--
+			--CASE (220):
+				--IF Probulb = 1 THEN
+					--RETURN(95)
+				--else
+					--RETURN(55)
+				--endif
+						--
+			--CASE (260):
+				--RETURN(92)
+				--
+	--ENDSELECT
+--END Geo_WTW
+--
+----***********************************************************************************************
+---- NWT Radius size
+---- get Radius  size from Profile heigth
+----***********************************************************************************************
+--ROUTINE Geo_WTRad-- Radius size
+--BEGIN
+				--RETURN(55)
+			--
+--END Geo_WTRad
+--
+----***********************************************************************************************
+---- Elevated CP Heigth 'A'
+---- get size from Profile heigth
+----***********************************************************************************************
+--ROUTINE Geo_ELCPH-- 
+--BEGIN
+	--SELECT  Prohei  OF		
+			--CASE (60):
+				--RETURN(30)
+			--
+			--CASE (80):
+				--RETURN(40)
+			--
+			--CASE (100):
+				--RETURN(51)
+				--
+			--CASE (120):
+				--RETURN(65)
+				--
+			--CASE (140):
+				--RETURN(73)
+			--
+			--CASE (160):
+				--RETURN(88)
+			--
+			--CASE (180):
+				--RETURN(105)
+				--
+			--CASE (200):
+				--RETURN(121)
+							--
+	--ENDSELECT
+--END Geo_ELCPH
+----
+--
+----***********************************************************************************************
+---- Elevated CP Rad 'R
+---- get size from Profile heigth
+----***********************************************************************************************
+--ROUTINE Geo_ELCPR-- 
+--BEGIN
+	--SELECT  Prohei  OF		
+			--CASE (60):
+				--RETURN(14)
+			--
+			--CASE (80):
+				--RETURN(15)
+			--
+	--ENDSELECT
+	--
+	--IF ProHei > 80 THEN
+		--RETURN(20)
+	--ENDIF
+	--
+--END Geo_ELCPR
+--
+----***********************************************************************************************
+---- Minimum plate size
+---- get size from Profile heigth
+----***********************************************************************************************
+--ROUTINE ProThick-- 
+--BEGIN
+	--SELECT  Prohei  OF		
+			--CASE (60):
+				--RETURN(5)
+			--
+			--CASE (80):
+				--RETURN(6)
+			--
+			--CASE (100):
+				--RETURN(6)
+				--
+			--CASE (120):
+				--RETURN(6)
+				--
+			--CASE (140):
+				--RETURN(7)
+			--
+			--CASE (160):
+				--RETURN(7)
+			--
+			--CASE (180):
+				--RETURN(8)
+				--
+			--CASE (200):
+				--RETURN(9)
+				--
+			--CASE (220):
+				--RETURN(9)
+						--
+			--CASE (260):
+				--RETURN(11)
+				--
+	--ENDSELECT
+--END ProThick
+--
+
+
+
+--***********************************************************************************************
+-- NB_check
+-- checking distance and heigth to NB_side 
+--***********************************************************************************************
+
+ROUTINE NB_Check -- (FeatNr :INTEGER) FROM GeoLib
+BEGIN
+
+--loop through profiles
+
+i=0
+NB_back=0
+REPEAT 
+	i=i+1
+	Bool_tmp=FALSE
+	IF i<> jobno THEN -- skip current profile
+		
+		-- X profiles
+		IF XY_dir=1 THEN 
+			
+			IF SE=-1 THEN 
+				IF ((sideP2<>0) AND (Pleng<500)) THEN 
+					NB_Back=5
+				ENDIF
+			else 
+				IF ((sideP1<>0) AND (Pleng<500)) THEN 
+					NB_Back=5
+				ENDIF
+			
+			ENDIF
+		
+		ENDIF
+		
+		
+		-- Y profiles
+		IF XY_dir=2 THEN 
+			-- loop through Y-profiles behind
+			--finding middle point of profile
+			IF Y_end>Y_start THEN 
+				real_tmp=Y_start+ABS(Y_end-Y_start)/2 -- midtpoint
+			else
+				real_tmp=Y_end+ABS(Y_end-Y_start)/2 -- midtpoint
+			ENDIF
+			
+			IF (((profile[i].Y1 < real_tmp) AND (profile[i].Y2 > real_tmp)) OR ((profile[i].Y1 > real_tmp) AND (profile[i].Y2 < real_tmp))) THEN 
+				
+				IF ((robot=1) AND (profile[i].X1 > X_start)) THEN 
+					NB_back=1
+					Bool_tmp=TRUE
+				ENDIF
+				
+				IF ((robot=3) AND (profile[i].X1 < X_start)) THEN 
+					NB_back=1
+					Bool_tmp=TRUE
+				ENDIF	
+				
+				IF ((Bool_tmp=TRUE) AND (ABS(profile[i].X1-X_start)<500)) THEN 
+					NB_back=5 -- profile is too close, change angels					
+				ENDIF
+				
+				-- temp demo Holland panel
+				--IF get_Ireg(495)=90002 THEN 				
+					--IF ((jobno=3) AND (i=2)) THEN 
+						--profile[i].top1=150
+					--ENDIF
+				--ENDIF
+				
+				IF ((Bool_tmp=TRUE) AND (ABS(profile[i].X1-X_start)<500) AND (profile[i].top1>200)) THEN 
+					NB_back=10 -- profile is too close for PF welding
+				ENDIF
+				IF ((Bool_tmp=TRUE) AND (ABS(profile[i].X1-X_start)<350) AND (profile[i].top1>100)) THEN 
+					NB_back=10 -- profile is too CLOSE, change angels				
+				ENDIF
+					-- temp demo Holland panel
+				IF get_Ireg(495)=90002 THEN 	
+					IF NB_back=10 THEN 
+						NB_back=5
+					ENDIF
+				endif
+				
+			ENDIF
+		ENDIF
+	ENDIF
+
+UNTIL ((NB_back>1) OR (i>=Get_Ireg(231)))
+
+
+--NB_side
+NB_side=0
+Dist_NextX1=0
+Dist_NextX3=0
+IF XY_dir = 1 THEN
+	i=0
+	REPEAT 
+		i=i+1
+		Bool_tmp=FALSE
+		-- loop through X-profiles behind
+				--finding middle point of profile
+				IF X_end>X_start THEN 
+					real_tmp=X_start+ABS(X_end-X_start)/2 -- midtpoint
+				else
+					real_tmp=X_end+ABS(X_end-X_start)/2 -- midtpoint
+				ENDIF
+			
+				
+				IF (((profile[i].X1 < real_tmp) AND (profile[i].X2 > real_tmp)) OR ((profile[i].X1 > real_tmp) AND (profile[i].X2 < real_tmp))) THEN 
+			
+					-- Robot 1 side
+					IF ((robot=1) AND (profile[i].Y1 < Y_start)) THEN 
+						NB_side=1
+						Bool_tmp=TRUE
+						Dist_NextX1=ABS(profile[i].Y1 - Y_start)
+					ENDIF
+					-- robot 3 side
+					IF ((robot=3) AND (profile[i].Y1 > Y_start)) THEN 
+						NB_side=1
+						Bool_tmp=TRUE
+						Dist_NextX3=ABS(profile[i].Y1 - Y_start)
+					ENDIF	
+						
+					IF ((Bool_tmp=TRUE) AND (ABS(profile[i].Y1-Y_start)<500) AND (profile[i].top1>100)) THEN 
+						NB_side=10 -- profile is too close
+					ENDIF
+					
+				ENDIF 
+				
+	UNTIL ((NB_side>1) OR (i>=Get_Ireg(231)))
+ENDIF
+
+IF robot=1 THEN 
+	NB_back1=NB_back
+	NB_side1=NB_side
+else
+	NB_back3=NB_back
+	NB_side3=NB_side
+ENDIF
+
+--tage højde svejse modsat i checket
+
+
+END NB_check
+
+
+ROUTINE SideLength --FROM GeoLib -- gettting length of actual side profile
+BEGIN
+	
+--Getting side length
+			
+			IF XY_dir = 1 THEN 
+				--IF (robot=1) THEN
+				--Robot 1
+					IF (SE=(-1)) THEN 
+						IF Swap_end = FALSE THEN 
+							Act_SideL1=Profile[jobno].SLength11
+						else
+							--Swap true
+							Act_SideL1=Profile[jobno].SLength21
+						ENDIF
+					else
+						--SE=1
+						IF Swap_end = FALSE THEN 
+							Act_SideL1=Profile[jobno].SLength21
+						else
+							--Swap true
+							Act_SideL1=Profile[jobno].SLength11
+						ENDIF
+					ENDIF
+				--ENDIF
+				
+				--IF (robot=3) THEN
+				--Robot 3
+					IF (SE=(-1)) THEN 
+						IF Swap_end = FALSE THEN 
+							Act_SideL3=Profile[jobno].SLength12
+						else
+							--Swap true
+							Act_SideL3=Profile[jobno].SLength22
+						ENDIF
+					else
+						--SE=1
+						IF Swap_end = FALSE THEN 
+							Act_SideL3=Profile[jobno].SLength22
+						else
+							--Swap true
+							Act_SideL3=Profile[jobno].SLength12
+						ENDIF
+					ENDIF
+				ENDIF
+			--ENDIF
+			
+			
+			IF XY_dir = 2 THEN 
+				--IF (robot=1) THEN
+				--Robot 1
+					IF (SE=(-1)) THEN 
+						IF Swap_end = FALSE THEN 
+							Act_SideL1=Profile[jobno].SLength12
+						else
+							--Swap true
+							Act_SideL1=Profile[jobno].SLength22
+						ENDIF
+					else
+						--SE=1
+						IF Swap_end = FALSE THEN 
+							Act_SideL1=Profile[jobno].SLength22
+						else
+							--Swap true
+							Act_SideL1=Profile[jobno].SLength12
+						ENDIF
+					ENDIF
+				--ENDIF
+				
+				--IF (robot=3) THEN
+				-- robot 3
+					IF (SE=(-1)) THEN 
+						IF Swap_end = FALSE THEN 
+							Act_SideL3=Profile[jobno].SLength11
+						else
+							--Swap true
+							Act_SideL3=Profile[jobno].SLength21
+						ENDIF
+					else
+						--SE=1
+						IF Swap_end = FALSE THEN 
+							Act_SideL3=Profile[jobno].SLength21
+						else
+							--Swap true
+							Act_SideL3=Profile[jobno].SLength11
+						ENDIF
+					ENDIF
+				ENDIF
+		--	ENDIF	
+		
+	-- Setting active side length
+	IF (robot=1) THEN	
+		IF swap_robot<>1 THEN 
+			act_sideL=act_sideL1
+		else
+			act_sideL=act_sideL3
+		ENDIF
+	else
+		IF swap_robot<>3 THEN 
+			act_sideL=act_sideL3
+		else
+			act_sideL=act_sideL1
+		ENDIF
+	ENDIF
+		
+
+END SideLength
+
+BEGIN
+	
+	
+END GeoLib
+	
+
+

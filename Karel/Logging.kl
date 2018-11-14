@@ -1,0 +1,411 @@
+-- ***********************************************************************************************
+PROGRAM logging
+%COMMENT = 'Vers. 1.0-rafa'
+%NOPAUSESHFT
+%NOPAUSE = ERROR + TPENABLE + COMMAND
+%NOABORT = ERROR 
+%NOLOCKGROUP
+
+TYPE
+%INCLUDE Types
+
+VAR
+	%INCLUDE Gvars
+	%INCLUDE MPL_vars
+          
+	Time_str:  STRING[20]
+	day_int: INTEGER
+	
+	timeInteger :			 INTEGER 
+	Label: 				STRING[10]
+	panelNum:				INTEGER
+	Profnum:				 INTEGER
+	weld_meters: 		REAL
+	effi: 					REAL
+	RunTime,Stoptime,SensTime,WeldTimeT,WeldTimeS: REAL -- times in minutes
+	RunTimeO,StoptimeO,SensTimeO,WeldTimeTO,WeldTimeSO: INTEGER -- times in miliseconds
+	RunTimeD,StoptimeD,SensTimeD,WeldTimeTD,WeldTimeSD: REAL -- daysum
+	ArcON1, ArcON3: BOOLEAN
+	stat: INTEGER
+	weav1,weav3: REAL
+	vec1: VECTOR
+	TempInt: INTEGER
+	running: BOOLEAN
+	
+ROUTINE LogToFile FROM Logging
+ROUTINE Log FROM Logging
+ROUTINE Resetvar FROM Logging
+ROUTINE TaskLineNr (Name : STRING) :INTEGER FROM TaskMan
+
+ROUTINE Get_IReg (Number : INTEGER) :INTEGER FROM FunktLib
+ROUTINE Get_RReg (Number : INTEGER) :REAL FROM FunktLib
+ROUTINE Set_IReg (Number : INTEGER; Value : INTEGER) FROM FunktLib
+ROUTINE Set_RReg (Number : INTEGER; Value : REAL) FROM FunktLib
+
+ROUTINE resetvar
+BEGIN
+	RunTimeO=0
+	StoptimeO=0
+	SensTimeO=0
+	WeldTimeTO=0
+	WeldTimeSO=0
+	ArcON1=FALSE
+	ArcON3=FALSE
+	running=FALSE
+	
+	
+	IF logstate<>0 THEN 
+		-- getting day timers from registers
+
+		runtimeD=Get_Rreg(430)
+		stoptimeD=Get_Rreg(431)
+		senstimeD=Get_Rreg(432)
+		weldtimeTD=get_Rreg(433)
+		weldtimeSD=Get_Rreg(434)
+		
+		-- add up day counters
+		RunTimeD=RuntimeD+Runtime
+		StoptimeD=StoptimeD+stoptime
+		SensTimeD=SenstimeD+senstime
+		WeldTimeTD=WeldtimeTD+weldtimeT
+		WeldTimeSD=WeldtimeSD+weldtimeS
+		
+		-- storing to registers
+		set_Rreg(430,runtimeD)
+		set_Rreg(431,stoptimeD)
+		set_Rreg(432,senstimeD)
+		set_Rreg(433,weldtimeTD)
+		set_Rreg(434,weldtimeSD)
+		
+	ENDIF
+END resetvar
+
+ROUTINE Log
+BEGIN
+	
+----------------------------------------------
+-- ******** Timer monitoring for effeciency
+----------------------------------------------
+logstate=0
+
+IF state=102 THEN 
+	resetvar
+ENDIF
+
+-- log total time
+IF ((state>200) AND (state<405))THEN 
+	CONNECT TIMER TO RuntimeO
+	running=TRUE
+else
+	DISCONNECT TIMER RuntimeO
+	running=FALSE
+ENDIF
+
+
+-- log Stop time for panel
+IF panelstate<>3 THEN 
+	CONNECT TIMER TO stoptimeO
+else
+	DISCONNECT TIMER stoptimeO
+ENDIF
+
+-- log Sensing Time
+IF (((RDO[RO_LaserLit1]) OR (RDO[RO_LaserLit2])) AND (panelstate=3))THEN 
+	CONNECT TIMER TO SensTimeO
+else
+	DISCONNECT TIMER  SensTimeO
+ENDIF	
+
+--set_Ireg(493,0) -- temp
+
+-- are R1 or R3 welding
+
+GET_VAR(TempINT,'*SYSTEM*','$WVSTATE[1].$CUR_REL_VEC', Vec1,Stat)
+weav1=vec1.x+vec1.y+vec1.z
+
+GET_VAR(TempINT,'*SYSTEM*','$WVSTATE[3].$CUR_REL_VEC', Vec1,Stat)
+weav3=vec1.x+vec1.y+vec1.z
+
+-- disable simulation 7
+--weav1=0
+--weav3=0
+
+IF ((DIN[I_arc_R1]=ON) OR ((weav1<>0) AND (Get_IReg(163)=1) AND (DOUT[O_WeldEnb]=OFF) AND (running=TRUE)))  THEN 
+	ArcON1=TRUE
+else
+	ArcON1=FALSE
+ENDIF
+
+IF ((DIN[I_arc_R3]=ON) OR ((weav3<>0) AND (Get_IReg(164)=1) AND (DOUT[O_WeldEnb]=OFF)and (running=true))) THEN 
+	ArcON3=TRUE
+else
+	ArcON3=FALSE
+ENDIF	
+	
+-- log total welding time
+IF ((ArcON1=TRUE) AND (ArcON3=TRUE)) THEN 
+	CONNECT TIMER TO weldTimeTO
+else
+	DISCONNECT TIMER weldTimeTO
+ENDIF
+
+-- log single welding time
+IF (((ArcON1=TRUE) AND (ArcON3=FALSE)) OR ((ArcON1=FALSE) AND (ArcON3=TRUE)))  THEN 
+	CONNECT TIMER TO weldTimeSO
+else
+	DISCONNECT TIMER weldTimeSO
+ENDIF
+
+--- CONVERTING TO MINTES
+Runtime=RuntimeO/1000/60
+Stoptime=StoptimeO/1000/60
+Senstime=SensTimeO/1000/60
+WeldTimeT=WeldTimeTO/1000/60
+WeldTimeS=WeldTimeSO/1000/60
+
+--Effeciency
+IF runtime>0 THEN 
+	effi=(WeldTimeT+(WeldtimeS/2))/runtime*100
+else
+	effi=0
+ENDIF
+
+
+	-- Get current welding distance ---- 
+	--R1:
+	GET_VAR(EntryWS, '*SYSTEM*', '$AWEPRODSTAT[1].$WELD_DIST', RespsRWS, StatWS) 
+	RespsRWS=RespsRWS/1000 -- to get value in meters
+	
+	IF Get_Rreg(438)<RespsRWS THEN -- if welding has been done
+		-- add up weld meter counter for R1
+		Set_Rreg(439,Get_RReg(439)+RespsRWS-Get_RReg(438))
+	ENDIF
+	
+	-- if counter crossed 1000 meters
+	IF Get_Rreg(438)>RespsRWS+500 THEN
+		Set_Rreg(439,Get_RReg(439)+RespsRWS-Get_RReg(438)+1000)
+	ENDIF
+	--log variable value for next loop
+	Set_Rreg(438,RespsRWS)
+	
+	--R3:
+	GET_VAR(EntryWS, '*SYSTEM*', '$AWEPRODSTAT[2].$WELD_DIST', RespsRWS, StatWS) 
+	RespsRWS=RespsRWS/1000 -- to get value in meters
+	
+	IF Get_Rreg(440)<RespsRWS THEN 
+		-- add up weld meter counter for R1
+		Set_Rreg(441,Get_RReg(441)+RespsRWS-Get_RReg(440))
+	ENDIF
+	
+	-- if counter crossed 1000 meters
+	IF Get_Rreg(440)>RespsRWS+500 THEN
+			Set_Rreg(441,Get_RReg(441)+RespsRWS-Get_RReg(440)+1000)
+	ENDIF
+	--log variable value for next loop
+	Set_Rreg(440,RespsRWS)
+	
+	--log total meters
+	Set_Rreg(442,Get_RReg(439)+Get_RReg(441))
+	--log panel meters
+	--Set_Rreg(443,Get_RReg(439)+Get_RReg(441))
+  	----------------------------------------------	 		
+	
+ 	
+ 	
+ 		
+ 	------------ writing to file ----------------------------------------------------------	
+ 	-- Panel logging
+ 	IF Get_Ireg(493)=4321 THEN 
+ 		-- Start of panel
+ 		 IF ((state = 201) AND (jobno=1))  THEN 
+	  		--logging
+	  		logstate=201
+	  		resetvar
+	  		LogToFile -- logging that we are starting on a new panel
+ 		 ENDIF
+ 		
+ 		
+ 		-- Terminate
+	 	 IF ((State=509))THEN    
+				logstate=509
+				LogToFile -- logging that we are starting on a new panel	
+				resetvar
+	 	ENDIF
+ 		
+	 	-- end of panel
+	 	 IF ((Get_IReg(230) >= Get_IReg(231)) AND (State=405))THEN    
+				logstate=408
+				LogToFile -- logging that we are starting on a new panel	
+				resetvar
+	 	ENDIF
+	 	
+	 	 	-- checking for new day
+	 	GET_TIME(TimeInt) 
+		CNV_TIME_STR(TimeInt,TimeS)
+	 	CNV_STR_INT(SUB_STR(times, 1,2), day)-- as integer
+	 	Set_IReg(449,day)
+	 	--
+	 	IF Get_IReg(448)<>Get_IReg(449) THEN 
+ 			Set_IReg(448,day)
+			logstate=1
+			LogToFile
+ 		ENDIF
+ 
+	 	
+ 	ENDIF
+ 	
+ 	-- log for every 15 min: 
+ 	IF Get_Ireg(493)=1234 THEN 
+ 		 IF Log_time=0 THEN 
+ 			CONNECT TIMER TO log_time
+ 		ENDIF
+	 	IF log_time>15*60*1000 THEN 
+	 		log_time=1 	
+	 		logstate=15 -- 15 min
+	 		
+	 		LogToFile 
+	 		ENDIF
+ 	ENDIF
+ 
+	 -- in case of errors: 
+	 IF ((state=801) OR (state=803)) THEN 
+	 			logstate=800
+				LogToFile
+	 ENDIF
+ 
+END Log
+
+
+ROUTINE LogToFile
+BEGIN
+
+		--- Getting Time stamp
+			GET_TIME(TimeInteger) -- as integer
+			CNV_TIME_STR(TimeInteger,Time_str) -- as string
+			
+			-- Getting Day
+			CNV_STR_INT(SUB_STR(time_str, 2,8), day_int)-- as integer
+			------------------------------------------------------------------------------
+			
+			-- Writing to logfile
+			-- date+time, Start/Finished/Day,Panelnumber, Profiles, Weld_meters, intemittens, total_time, senstime, weld_twin, weld_single, stop_time
+			IF  logstate<>800 THEN 
+				OPEN FILE LogFile ('ap','fr:\Log.txt')
+			ENDIF
+				
+				-- New day: 
+				IF logstate=1 THEN 
+					label='Day-sum'
+					PanelNum=Get_IReg(234) -- panel conter
+						Set_IReg(234,0)
+					Profnum=Get_IReg(232) -- profile counter
+						Set_IReg(232,0)
+					Weld_meters=Get_RReg(442) -- total meters
+						Set_RReg(439,0) -- R1 meters
+						Set_RReg(441,0) -- R3 meters
+						Set_RReg(442,0) -- total meters
+						Set_RReg(443,0) -- panel meters
+					
+					--Effeciency
+					IF runtimed>0 THEN 
+						effi=(WeldTimeTd+(WeldtimeSd/2))/runtimed*100
+					else
+						effi=0
+					ENDIF
+						
+					
+					WRITE LogFile (Time_str, ';' , Label,';',PanelNum,';',Profnum,';',
+						 Weld_meters::6::2, ';',effi::6::2, ';', RunTimeD::6::2, ';', SensTimeD::6::2, ';', WeldtimeTD::6::2, ';', WeldtimeSD::6::2, ';', StoptimeD::6::2,    CR)
+					CLOSE FILE LogFile
+						
+						-- resetting day counters
+						RunTimeD=0
+						StoptimeD=0
+						SensTimeD=0
+						WeldTimeTD=0
+						WeldTimeSD=0
+						
+						--resetting registers
+						set_Rreg(430,runtimeD)
+						set_Rreg(431,stoptimeD)
+						set_Rreg(432,senstimeD)
+						set_Rreg(433,weldtimeTD)
+						set_Rreg(434,weldtimeSD)
+					
+				ENDIF
+				
+				-- Start of panel
+				IF logstate=201 THEN 
+					label='START'
+					PanelNum=Get_IReg(233) -- panel num
+					Profnum=0
+					Weld_meters=0
+					effi=0
+						--writing to file
+					WRITE LogFile (Time_str, ';' , Label,';',PanelNum,';',Profnum,';',
+						 Weld_meters::6::2, ';',effi::6::2, ';', RunTime::6::2, ';', SensTime::6::2, ';', WeldtimeT::6::2, ';', WeldtimeS::6::2, ';', Stoptime::6::2,    CR)
+					CLOSE FILE LogFile
+				ENDIF
+				
+				-- end of panel
+				IF ((logstate=408) OR (logstate=509)) THEN 
+					IF logstate=408 THEN 
+						label='Finished'
+					else
+						label='Terminate'
+					ENDIF
+					
+					PanelNum=Get_IReg(233)
+					Profnum=Get_IReg(231)
+					Weld_meters=Get_RReg(442)-Get_RReg(443) -- panel meters
+					Set_RReg(443,Get_RReg(442)) -- store panel meters
+					--effi=Get_RReg(433) -- efficiency
+					
+					--writing to file
+					WRITE LogFile (Time_str, ';' , Label,';',PanelNum,';',Profnum,';',
+						 Weld_meters::6::2, ';',effi::6::2, ';', RunTime::6::2, ';', SensTime::6::2, ';', WeldtimeT::6::2, ';', WeldtimeS::6::2, ';', Stoptime::6::2, CR)
+					CLOSE FILE LogFile
+				ENDIF
+				
+				--******************************************
+				-- 15 min log
+				IF logstate=15 THEN 
+					Profnum=Get_IReg(232)
+					Weld_meters=Get_RReg(439)+Get_RReg(441)
+				
+					
+					--writing to file
+					WRITE LogFile (Time_str, ';' ,Profnum,';', Weld_meters::6::2, ';',effi::6::2, ';', Get_RReg(431)::6::2, ';', Get_RReg(432)::6::2, ';', Get_RReg(430)::6::2,   CR)
+					CLOSE FILE LogFile
+				
+				
+				
+				
+				ENDIF
+				
+				
+					-- *********************************************
+	-->> ERROR logging <<--
+	-- ********************************************
+	            
+	   IF logstate=800 THEN 
+			IF ((Errorno <> 11003) and (Tasknr1>0)) THEN    --(11003 = deadman)
+				OPEN FILE LogFile ('ap','fr:\ErrorLog.txt')
+			
+				WRITE LogFile (Time_str,';',ErrorNo,';',TaskNr1,';',TaskName1,';',TaskLineNr(TaskName1),';',TaskNr3,';',TaskName3,';',TaskLineNr(TaskName3),';',Jobno,';',XY_dir,';',SE,CR)
+				CLOSE FILE LogFile
+			ENDIF
+	endif
+				
+
+END LogToFile
+
+
+
+BEGIN			
+
+		         
+	
+END logging
+ 
+ 

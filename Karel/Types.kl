@@ -1,0 +1,87 @@
+--  Global defined Types
+
+
+-- Tasklist (que_gen)
+Task_Type FROM TaskMan = STRUCTURE
+    	Name      	:STRING[12]
+    	Prg_Type  	:INTEGER     -- 1 = Karel; 2 = TP (ikke svejse); 3 = TP (svejse)
+    	Enabled   	:BOOLEAN
+    	PreTask	:INTEGER
+    	Done		:BOOLEAN
+ENDSTRUCTURE
+
+
+Pos_Chk FROM FunktLib = STRUCTURE
+	Pos_Select     : XYZWPREXT
+	Pos_Select1  : XYZWPREXT IN GROUP[1]
+	Pos_Select3  : XYZWPREXT IN GROUP[3]
+	Result  : INTEGER
+ENDSTRUCTURE
+
+Step_type FROM FunktLib = STRUCTURE
+	ENBL :BOOLEAN
+	E  : REAL
+	S : REAL
+	Z  : REAL
+	Text : STRING[10]	
+	Succes: BOOLEAN
+ENDSTRUCTURE
+
+Check_type FROM SensChk = STRUCTURE
+	xyz : ARRAY[15] OF REAL
+ENDSTRUCTURE
+
+Comp_type FROM SensChk = STRUCTURE
+	xyz : ARRAY[3] OF REAL
+ENDSTRUCTURE
+
+Crosses FROM MPL_vars = STRUCTURE
+	XY  : REAL
+	Side  : INTEGER
+	Heigth: REAL
+ENDSTRUCTURE
+
+Part FROM MPL_vars = STRUCTURE
+	XY_Start  : REAL
+	XY_End   : REAL
+	Heigth: REAL
+	Dist: REAL
+	OO1: REAL
+	OO2: REAL
+ENDSTRUCTURE
+
+
+
+
+Profiles FROM MPL_vars = STRUCTURE
+	--No  : INTEGER
+	-- Start point of profile
+	X1  : REAL
+	Y1 : REAL
+	Top1:REAL
+	end1: INTEGER
+	FL11 : REAL
+	FL12 : REAL
+	STop1:REAL
+	SFL11:REAL
+	SFL12:REAL
+	SLength11:REAL
+	SLength12:REAL
+	
+	
+	-- End point of profile
+	X2  : REAL
+	Y2 : REAL
+	Top2:REAL
+	end2: INTEGER
+	FL21 : REAL
+	FL22 : REAL
+	STop2:REAL
+	SFL21:REAL
+	SFL22:REAL
+	SLength21:REAL
+	SLength22:REAL
+	
+	CrossNo  : INTEGER
+
+ENDSTRUCTURE

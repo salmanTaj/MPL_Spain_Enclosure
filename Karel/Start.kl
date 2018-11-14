@@ -1,0 +1,136 @@
+
+PROGRAM Start
+%COMMENT = 'Start'
+%NOPAUSESHFT
+%NOPAUSE = ERROR + TPENABLE + COMMAND
+%NOABORT = ERROR 
+%NOLOCKGROUP
+
+TYPE
+%INCLUDE Types      	-- all types is declared here
+
+VAR
+%INCLUDE Gvars
+%INCLUDE MPL_vars
+
+STATUS 	:INTEGER	-- Using STATUS outside the loop, to make sure we don't run into unitialized data from a cold startup
+Bool 		: BOOLEAN-- Recieves flag if reg value is a Real
+Int,i			: INTEGER	-- Contains reg val if an Integer
+Reall		: REAL		-- Contains reg val if a Real
+	
+ROUTINE LinerCheck FROM TaskMan
+ROUTINE ResetAll FROM Taskman
+ROUTINE TaskStatus (NameS : STRING) :INTEGER FROM TaskMan
+
+ROUTINE Get_IReg (Number : INTEGER) :INTEGER FROM FunktLib
+ROUTINE Get_RReg (Number : INTEGER) :REAL FROM FunktLib
+ROUTINE Set_IReg (Number : INTEGER; Value : INTEGER) FROM FunktLib
+ROUTINE Set_RReg (Number : INTEGER; Value : REAL) FROM FunktLib
+
+
+BEGIN
+	$MCR.$GENOVERRIDE = 100
+
+	-->> Initialize system -------------------------
+	Resetall
+	---------------------------------------------------------  
+	
+	-->> Current global version number, this should follow the current panel version
+--	GVersion = 0.057
+	---------------------------------------------------------  
+	
+	-->> Inrotech usage only, remember to reset values when leaving the system
+	AllErrMess = FALSE		-- (defautl = false) False: only present 1 error, True: present all errors in the list (acknowledge)
+	SysSound = TRUE			-- (default = true) False: all sound is disabled, True: all sound is enabled
+	---------------------------------------------------------  	
+	
+	-->> Check log file size -------------------------
+	--OPEN FILE LogFile ('ap','fr:\StatLog.txt')
+		--SET_REAL_REG(215,GET_FILE_POS(LogFile),STATUS)
+		--GET_REG(215,Bool,Int,Reall,STATUS)
+		--IF (Reall > 265000) THEN 		-- 265kb = ca 2500 linier
+			--SET_INT_REG(211,1,STATUS)				-- popup warning logfil is getting to big
+			--IF (Reall > 350000) THEN  	
+				--CLOSE FILE LogFile
+				--DELAY 10
+				--OPEN FILE LogFile ('rw','fr:\StatLog.txt')
+				--SET_INT_REG(211,3,STATUS) 			-- popup warning, logfile was deleted 
+			--ENDIF
+		--ELSE
+			--SET_INT_REG(211,0,STATUS)
+			--SET_REAL_REG(215,GET_FILE_POS(LogFile),STATUS) 
+		--ENDIF
+	--CLOSE FILE LogFile
+	--------------------------------------------------------
+	
+	-->> Robot manuel/auto status --------------
+	-- if both true = Auto
+	IF (OPIN[8] = TRUE) AND (OPIN[9] = TRUE) THEN
+		TPFlag = FALSE
+		TaskFlag = FALSE
+	ELSE
+		TPFlag = TRUE
+		TaskFlag = TRUE
+	ENDIF 
+	---------------------------------------------------------  
+
+	-->> Checkliner -----------------------------------
+	-- everything is handled in taskman routine + in panel
+	IF (Get_IReg(26) <> 0) THEN
+		LinerCheck
+		DELAY 10
+	ENDIF
+	---------------------------------------------------------  
+	---------------------------------------------------------  
+	
+	-->> Start TaskManager ------------------------
+	RUN_TASK('TaskMan',0,FALSE,TPFLag,1,STATUS)
+	DELAY 100
+	---------------------------------------------------------  
+	
+	-->> the Start loop, to make sure to restart taskmanager if switched between manual <-> auto
+	-- or a resetall command
+	WHILE 1 = 1 DO
+		
+		-->> Check if we have a reset all command from panel
+		--IF (Panel.CmdReset = TRUE) THEN
+			--ABORT_TASK(TaskName,TRUE,TRUE,StatST)
+			--DELAY 100
+			--ABORT_TASK('TaskMan',TRUE,TRUE,StatST)
+			--DELAY 100
+			--Resetall
+			----RUN_TASK('ResetAll',0,FALSE,TPFlag,1,StatST)
+			--DELAY 300
+			--RUN_TASK('TaskMan',0,FALSE,TPFLag,1,StatST)
+			--Panel.CmdReset = FALSE
+		--ENDIF
+		--------------------------------------------------------- 		
+		
+		-- >> Check that taskmanager is running
+		IF (TaskStatus('Taskman') <> 0) THEN
+			RUN_TASK('TaskMan',0,FALSE,TPFlag,1,StatST)
+		ENDIF 	
+		--------------------------------------------------------- 	             
+		
+		-- >> Check IF TP has changed between auto<->man
+		IF (OPIN[8] = FALSE) OR (OPIN[9] = FALSE) THEN
+			TPFlag = TRUE
+		ELSE
+			TPFlag = FALSE
+		ENDIF
+	 	IF (TPFlag <> TaskFlag) THEN 
+		              TaskFlag = TPFlag
+		              PAUSE_TASK('TaskMan',TRUE,TRUE,StatST)
+		              IF (StatST = 0) THEN
+		               		RUN_TASK('TaskMan',0,FALSE,TPFLag,1,StatST)
+		                	IF (StatST <> 0) THEN
+		                  		WRITE TPERROR(CR,'problems with MotionToken')                   
+		                	ENDIF
+		              ENDIF
+	 	ENDIF
+		--------------------------------------------------------- 	
+		DELAY 200
+		
+		
+	ENDWHILE	 	
+END Start

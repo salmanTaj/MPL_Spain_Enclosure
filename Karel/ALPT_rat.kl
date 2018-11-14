@@ -1,0 +1,376 @@
+
+-- -- -- -- --     ALPT_rat      -- -- -- -- --
+-----------------------------------------------------------------------------------------
+PROGRAM ALPT_Rat
+	%NOPAUSESHFT
+	%NOPAUSE = ERROR + TPENABLE
+	%NOABORT = ERROR 
+	%NOLOCKGROUP
+
+TYPE
+	%INCLUDE Types
+
+VAR
+	%INCLUDE Gvars
+	%INCLUDE MPL_vars
+		
+	Dag, maaned  :INTEGER
+  filnavn1			FROM TASKMAN:STRING[18]
+  i : INTEGER
+  Real_tmp	:REAL
+  StatST1: INTEGER
+
+
+--- Routines from Funklib
+ROUTINE Set_DOUT (OutNr   :INTEGER; Value : BOOLEAN): BOOLEAN FROM FunktLib
+ROUTINE Get_DIN (OutNr   :INTEGER): BOOLEAN FROM FunktLib
+ROUTINE Get_IReg (Number : INTEGER) :INTEGER FROM FunktLib
+ROUTINE Get_RReg (Number : INTEGER) :REAL FROM FunktLib
+ROUTINE Set_IReg (Number : INTEGER; Value : INTEGER) FROM FunktLib
+ROUTINE Set_RReg (Number : INTEGER; Value : REAL) FROM FunktLib
+ROUTINE Hvis (ValocalR : REAL; Compare : STRING; Var2 : REAL ; Stp_True : INTEGER; Stp_False : INTEGER) :INTEGER FROM Funktlib
+--
+ROUTINE Def_Cart_MP (RegNr: INTEGER; X :REAL;Y:REAL;Z:REAL;w:REAL;p:REAL;r:REAL;Ex1:REAL)FROM FunktLib
+ROUTINE Def_Jnt_MP (RegNr: INTEGER; J1:REAL; J2:REAL; J3:REAL; J4:REAL; J5:REAL; J6:REAL; J7:REAL; J8:REAL; J9:REAL)FROM FunktLib
+ROUTINE Def_SP (OutNr   : INTEGER; X :REAL;Y:REAL;Z:REAL) FROM FunktLib	-- sensepunkt der lægges ud i registre
+ROUTINE Act_Pos(MPNr   : INTEGER;rob : INTEGER) FROM FunktLib	-- put aktuelle position i MP [nummer]
+ROUTINE CloseDoor FROM  Funktlib -- closes laserdoor and check laser dist
+
+--
+ROUTINE Searching(DirNum:INTEGER; SearchLen:INTEGER; Retract:INTEGER;SearcSign: BOOLEAN;Err_Cond:INTEGER):REAL FROM FunktLib
+ROUTINE Ch_Conf_Mov(PosExt1:XYZWPREXT;PosExt2:XYZWPREXT;ForceCh:INTEGER;SearchVal:BOOLEAN):XYZWPREXT FROM FunktLib
+ROUTINE Mot_Sens(PosDest:XYZWPREXT;SearchType : STRING; Flange: BOOLEAN ):Pos_Chk FROM FunktLib
+
+ROUTINE Motion(PosDest:XYZWPREXT;ForceCh:INTEGER)  FROM FunktLib
+ROUTINE Chk_Dest(PosDest:XYZWPREXT;ForceCh:INTEGER):Pos_Chk FROM FunktLib
+ROUTINE Dir_func FROM  Funktlib
+--
+----- Routines from GeoLib
+ROUTINE Feat_Tbl (FeatNr :INTEGER) FROM GeoLib -- Feature information and steps
+ROUTINE ProfileH (H_meas: REAL) : INTEGER FROM GeoLib -- Profile Heigth
+ROUTINE ProThick : REAL FROM GeoLib -- Min. plate thickness
+ROUTINE Def_PR (OutNr   : INTEGER; ReqD :INTEGER;ReqL:REAL;G1: INTEGER; G2:INTEGER; G3:INTEGER) FROM FunktLib
+--
+ROUTINE Geo_Scal : REAL FROM GeoLib -- Scallop size
+ROUTINE Geo_CutRad  : REAL FROM GeoLib -- Radios
+ROUTINE Geo_NWTH  : REAL FROM GeoLib -- NWTCP Heigth
+ROUTINE Geo_NWTW  : REAL FROM GeoLib -- NWTCP Width
+ROUTINE Geo_NWTRad  : REAL FROM GeoLib -- NWTCP Radius
+--
+ROUTINE Geo_WTH  : REAL FROM GeoLib -- WTCP Heigth
+ROUTINE Geo_WTW  : REAL FROM GeoLib -- WTCP Width
+ROUTINE Geo_WTRad  : REAL FROM GeoLib -- WTCP Radius
+--
+ROUTINE Geo_ELCPH : REAL FROM GeoLib -- ELCP Heigth
+ROUTINE Geo_ELCPR : REAL FROM GeoLib -- ELCP Rad
+
+--- Routines from Taskman
+ROUTINE Loop_AL FROM AnLa_ny
+ROUTINE Start_AL FROM AnLa_ny
+ROUTINE ReadLaser : REAL FROM AnLa_ny
+
+
+
+-- skal vi bruge dem?
+
+--ROUTINE WeldTbl (FeatNr :INTEGER) FROM Inrotech
+--ROUTINE GetVal FROM analaser    
+--ROUTINE ReadLaser(S_Type:INTEGER; S_Val:REAL) FROM analaser    
+--ROUTINE Anago FROM Anago
+
+
+--
+----------------------------------------------------------f---------------------------------
+---- StepMachine (-1/1)
+-------------------------------------------------------------------------------------------
+ROUTINE StepMachine4
+BEGIN
+
+--################################################--
+	-- Step 51 Rat hole search 1
+--################################################--
+	SC=51+SO
+		IF step[SC].enbl=TRUE THEN
+		SE=-1
+		
+		Actstep=SC
+		ErrorNo = 501
+	
+		
+		IF robot=1 THEN -- move a little back
+			Motion(MP[14],0)	
+			act_pos(6,1)
+		else
+			mp[6]=mp[13]-- Robot 1 position
+			
+			IF xy_dir=1 THEN 
+				mp[6].x=mp[14].x
+			else
+				mp[6].y=mp[14].y
+			ENDIF
+
+			IF XY_dir=2 THEN 
+				mp[6].ext1=mp[13].ext1+150*Y_dir
+			ENDIF
+		ENDIF
+		
+		mp[8]=mp[6]
+		--mp[8].p=60
+		s_dir=1
+		dir_func
+		IF XY_dir = 1 THEN
+			mp[8].x=mp[6].x+30*A_dir
+		else
+			mp[8].y=mp[6].y+30*A_dir
+		ENDIF
+		
+		-- go higher
+		mp[8].z=mp[8].z+8
+		
+		-- start point behind start of WH
+		Motion(MP[8],0)	
+		
+		sensspeed = 25
+		-- Sense out of profile, move back in
+		
+		tool_dir=2 -- direction to get tool from
+		dir_func
+		IF DIN[I_Slaser] = ON THEN 
+			step[SC].S=Searching(4,50,-5,FALSE,1)
+		else
+			step[SC].S=Searching(-4,50,5,TRUE,1)	
+		ENDIF
+		
+		-- Analog sensing for start of water hole
+		act_pos(6,robot)
+		
+		Mp[8]=MP[6]
+		s_dir=-1
+		dir_func
+		IF XY_dir = 1 THEN
+			mp[8].x=mp[6].x+50*A_dir
+		else
+			mp[8].y=mp[6].y+50*A_dir
+		ENDIF
+	
+		finddiff = 3.5 -- edge differance
+	
+		sensspeed = 25
+		Sens_Pos=Mot_sens(mp[8],'A',FALSE) -- sensing towards hole
+		step[SC].text = edge_type		
+		
+		
+		IF ((edge_type='Flush')) THEN -- fake water hole
+			closeDoor
+			errorno=581
+			errorreq=TRUE
+			ABORT
+		ENDIF
+		
+		--store point
+		act_pos(7,robot)
+		
+
+		
+		-- fine sensing of edge for R3: 
+		
+		IF Robot=3 THEN 
+			-- Move to mid of hole
+					Mp[5]=MP[7]
+					s_dir=1
+					dir_func
+					IF XY_dir = 1 THEN
+						mp[5].x=mp[7].x+20*A_dir
+					else
+						mp[5].y=mp[7].y+20*A_dir
+					ENDIF
+			
+				Motion(MP[5],0)
+				-- Sense down: 
+			step[SC].Z=Searching(-3,60,8,TRUE,1)+1.5
+			
+			-- search back for start of WH
+			
+			tool_dir=2 -- direction to get tool from
+				dir_func
+				IF DIN[I_Slaser] = ON THEN 
+					step[SC].S=Searching(4,50,2,FALSE,1)
+				else
+					step[SC].S=Searching(-4,50,-2,TRUE,1)	
+				ENDIF
+			
+			s_dir=-1
+			dir_func
+			step[SC].E=Searching(S_dir,100,0,FALSE,1)
+		
+		
+		--IF XY_dir = 1 THEN
+			--step[SC].e = Sens_Pos.Pos_Select.x
+		--else
+			--step[SC].e= Sens_Pos.Pos_Select.y
+		--ENDIF
+		
+		-- fine sensing
+		
+			
+	----- Defining Sensing point -----
+		
+		--scallop point high  SP3
+		ProE=step[SC].E
+		ProS=Step[SC].S
+		ProZ=step[SC].Z
+		dir_func
+		Def_SP(11,ProX,ProY,ProZ)
+	
+		ENDIF
+	ENDIF
+
+--################################################--
+	-- Step 52 Rat hole search 2
+--################################################--
+	SC=52+SO
+		IF step[SC].enbl=TRUE THEN
+		Actstep=SC
+		ErrorNo = 501
+		
+		-- Analog sensing to get profile under scallop
+
+		Motion(mp[7],0)
+		
+		Mp[9]=MP[7]
+		
+		s_dir=-1
+		dir_func
+		IF XY_dir = 1 THEN
+			mp[9].x=mp[9].x+100*A_dir
+		else
+			mp[9].y=mp[9].y+100*A_dir
+		ENDIF
+	
+		finddiff = 5 -- edge differance
+	
+		sensspeed = 75
+		Sens_Pos=Mot_sens(mp[9],'A',FALSE) -- sensing towards hole
+		step[SC].text = edge_type		
+		
+		-- fine sensing
+		sensspeed = 25
+		
+		-- sens out in tool 
+		tool_dir=2 -- what point to get from tool sensing
+		s_dir=2-- for offsetting points
+		dir_func
+		IF DIN[I_Slaser] = ON THEN 
+			step[SC].S=Searching(4,50,4,FALSE,1)+1*F_dir-- 2017 was retract 5 before
+		else
+			-- then laser is on baseplate. 
+			s_dir=-2
+			dir_func
+			step[SC].S=Searching(s_dir,50,-3,TRUE,1)-2*F_dir	
+		ENDIF
+		
+		-- sens back to get the end
+		S_dir=1
+		dir_func
+		step[SC].E=Searching(S_dir,100,0,FALSE,1)+1.5*F_dir
+		
+		--Z
+		step[SC].Z=Searching(-3,40,5,TRUE,1)+1.5
+		--step[SC].Z=zbase
+		
+		-- search back for start of WH
+		s_dir=-1
+		dir_func
+		step[SC].E=Searching(S_dir,100,0,TRUE,1)
+		
+			
+	----- Defining Sensing point -----
+		
+		--scallop point high  SP3
+		ProE=step[SC].E
+		ProS=Step[SC].S
+		ProZ=step[SC].Z
+		dir_func
+		Def_SP(2,ProX,ProY,ProZ)
+	ENDIF
+
+END Stepmachine4
+
+
+-----------------------------------------------------------------------------------------
+-- Step2 begins
+----------------------------------------------------------------------------------------
+BEGIN
+	
+-- Initialize system vars
+	$GROUP[1].$UFRAME = $MNUFRAME[1, 1] 
+	$GROUP[1].$UTOOL = $MNUTOOL[1, 3]
+	$GROUP[3].$UFRAME = $MNUFRAME[3, 1] 
+	$GROUP[3].$UTOOL = $MNUTOOL[3, 3]
+	Set_IReg(96,1) -- setting userframe for TP program
+	
+		--Switching to UF2 
+	$GROUP[1].$UFRAME = $MNUFRAME[1, 2] 
+	$GROUP[3].$UFRAME = $MNUFRAME[3, 2] 
+	
+	Set_IReg(96,2) -- setting userframe for TP program
+
+---**************************************************************
+-- Call StepMachine First time
+---**************************************************************
+-- Active robot + sensor
+--IF (((TaskName1='ALPT2') AND (Pretask1=TRUE))) THEN -- if robot 1 is running the program
+	Robot=1
+
+	RD=1
+	side12=1
+	I_SLaser = I_SLaser1
+	O_SLaser = O_SLaser1
+	IA_SLaser = IA_SLaser1
+	
+	
+	-- Setting step range
+		
+		SO = 30+30*RD
+		
+	IF RDO[RO_LaserLit1] = FALSE THEN
+		RDO[RO_LaserLit1] = TRUE	-- Open laserhouse
+		DOUT[O_SLaser1] = TRUE	-- Power on laser
+		--DELAY 1000
+	ENDIF
+
+	step[51+SO].enbl=TRUE
+	step[52+SO].enbl=TRUE 
+	stepMachine4
+	
+	RDO[RO_LaserLit1] = FALSE	-- Open laserhouse
+	DOUT[O_SLaser1] = FALSE	-- Power on laser	
+--ENDIF 
+
+---**************************************************************
+-- Call StepMachine First time
+---**************************************************************
+
+	Robot=3
+	RD=-1
+	side12=2
+	I_SLaser = I_Slaser2
+	O_SLaser = O_SLaser2
+	IA_SLaser = IA_SLaser2
+	
+	-- Setting step range
+		SO = 30+30*RD
+	
+		IF RDO[RO_LaserLit2] = FALSE THEN
+			RDO[RO_LaserLit2] = TRUE	-- Open laserhouse
+			DOUT[O_SLaser2] = TRUE	-- Power on laser
+			--DELAY 1000
+		ENDIF
+
+	step[51+SO].enbl=TRUE
+	step[52+SO].enbl=TRUE 
+	stepMachine4
+	
+	RDO[RO_LaserLit2] = FALSE	
+	DOUT[O_SLaser2] = FALSE
+END ALPT_Rat

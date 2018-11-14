@@ -1,0 +1,142 @@
+/PROG  PRG_CALC3
+/ATTR
+OWNER		= MNEDITOR;
+COMMENT		= "";
+PROG_SIZE	= 2349;
+CREATE		= DATE 17-06-12  TIME 10:16:28;
+MODIFIED	= DATE 18-02-27  TIME 15:11:40;
+FILE_NAME	= PGR_CALC;
+VERSION		= 0;
+LINE_COUNT	= 102;
+MEMORY_SIZE	= 2697;
+PROTECT		= READ_WRITE;
+TCD:  STACK_SIZE	= 0,
+      TASK_PRIORITY	= 50,
+      TIME_SLICE	= 0,
+      BUSY_LAMP_OFF	= 0,
+      ABORT_REQUEST	= 0,
+      PAUSE_REQUEST	= 0;
+DEFAULT_GROUP	= *,*,1,*,*;
+CONTROL_CODE	= 00000000 00000000;
+/APPL
+  ARC : TRUE ; 
+  ARC Welding Equipment : *,1,*,*,*;
+
+MPAS ;
+MPAS_NUM_PASSES        : 0;
+MPAS_LAST_PASS         : 0;
+MPAS_CURRENT_PASS      : 0;
+MPAS_STATUS_PASS       : 0;
+/MN
+   1:  !************************** ;
+   2:  !** Angle  Calc China;
+   3:  !************************** ;
+   4:   ;
+   5:   ;
+   6:  !--  PB Normal ;
+   7:  PR[21]=PR[43]    ;
+   8:  PR[21,4]=0    ;
+   9:  PR[21,5]=48    ;
+  10:  PR[21,6]=(-180)    ;
+  11:   ;
+  12:  !flange side ;
+  13:  //IF (R[263]=2),R[268]=(1) ;
+  14:   ;
+  15:  IF (R[268]=1) THEN ;
+  16:  !--  PB low ;
+  17:  PR[21]=PR[43]    ;
+  18:  PR[21,4]=(-48)-R[191]    ;
+  19:  PR[21,5]=R[192]    ;
+  20:  PR[21,6]=(-90)-R[193]    ;
+  21:  ENDIF ;
+  22:   ;
+  23:  ! UF 1 setting ;
+  24:  IF ((R[221]=18) AND (R[70]=51)),PR[21,6]=PR[21,6]+R[80] ;
+  25:   ;
+  26:  !--  PB corner 1+2 ;
+  27:  PR[23]=PR[43]    ;
+  28:  PR[23,4]=0    ;
+  29:  PR[23,5]=50    ;
+  30:  PR[23,6]=135    ;
+  31:   ;
+  32:  !--  PB corner 3 ;
+  33:  PR[24]=PR[43]    ;
+  34:  PR[24,4]=0    ;
+  35:  PR[24,5]=50    ;
+  36:  PR[24,6]=135    ;
+  37:   ;
+  38:  !--  PB web mid ;
+  39:  PR[25]=PR[43]    ;
+  40:  PR[25,4]=0    ;
+  41:  PR[25,5]=55    ;
+  42:  PR[25,6]=135    ;
+  43:   ;
+  44:  IF (R[269]=1) THEN ;
+  45:  !--  PB web mid ;
+  46:  PR[25]=PR[43]    ;
+  47:  PR[25,4]=48+R[191]    ;
+  48:  PR[25,5]=(-20)    ;
+  49:  PR[25,6]=21.4+R[193]    ;
+  50:  ENDIF ;
+  51:   ;
+  52:  !--  PB web ;
+  53:  PR[26]=PR[43]    ;
+  54:  PR[26,4]=0    ;
+  55:  PR[26,5]=48    ;
+  56:  PR[26,6]=90    ;
+  57:   ;
+  58:  IF (R[269]=1) THEN ;
+  59:  !--  PB web low ;
+  60:  PR[26]=PR[44]    ;
+  61:  PR[26,4]=48+R[191]    ;
+  62:  PR[26,5]=R[192]    ;
+  63:  PR[26,6]=0+R[193]    ;
+  64:  ENDIF ;
+  65:   ;
+  66:  !--  PF ;
+  67:  PR[28]=PR[43]    ;
+  68:  PR[28,4]=0    ;
+  69:  PR[28,5]=90    ;
+  70:  PR[28,6]=135    ;
+  71:   ;
+  72:   ;
+  73:  ! if profile in X dir ;
+  74:  IF (R[81]=1) THEN ;
+  75:  FOR R[137]=21 TO 29 ;
+  76:  PR[R[137],4]=(0+(PR[R[137],4]*R[95]*R[82]*1)) ;
+  77:  PR[R[137],4]=PR[R[137],4]*R[179]    ;
+  78:  PR[R[137],6]=((-90)+(PR[R[137],6]*R[95]*R[82]*(-1))) ;
+  79:  PR[R[137],6]=PR[R[137],6]*R[179]    ;
+  80:  ENDFOR ;
+  
+   :! changing again for low angle; 
+     14:  IF ((R[268]=1) and (R[82]=(1)) and (R[95]=(-1))) THEN ;
+  16:  !--  PB low ;
+  17:  PR[21,4]= PR[21,4]-90;
+  19:  PR[21,6]=PR[21,6]-180    ;
+  20:  ENDIF ;
+  :;
+  81:  ELSE ;
+  82:  ! if profile in Y dir ;
+  83:  FOR R[137]=21 TO 29 ;
+  84:  PR[R[137],4]=(0+(PR[R[137],4]*R[95]*R[83]*1)) ;
+  85:  PR[R[137],6]=((0+(PR[R[137],6]*R[95]*R[83]*(-1)))) ;
+  86:  ENDFOR ;
+  87:  ENDIF ;
+  88:  !************************** ;
+  89:  !** Offset  Calculation ;
+  90:  !************************** ;
+  91:  ! if profile in X dir ;
+  92:  IF (R[81]=1) THEN ;
+  93:  !X-offset ;
+  94:  R[145]=R[145]*R[95]*R[82]    ;
+  95:  R[146]=R[146]*1*R[179]    ;
+  96:  ELSE ;
+  97:  ! if profile in Y dir ;
+  98:  R[137]=R[145]    ;
+  99:  R[145]=R[146]*(-1)    ;
+ 100:  R[146]=R[137]*R[95]*R[83]    ;
+ 101:  ENDIF ;
+ 102:   ;
+/POS
+/END

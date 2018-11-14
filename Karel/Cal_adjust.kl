@@ -1,0 +1,47 @@
+-- ***********************************************************************************************
+PROGRAM Cal_adjust
+%COMMENT = 'Vers. 1.0-rafa'
+%NOPAUSESHFT
+%NOPAUSE = ERROR + TPENABLE + COMMAND
+%NOABORT = ERROR 
+%NOLOCKGROUP
+
+TYPE
+	%INCLUDE Types
+	
+VAR
+	%INCLUDE Gvars
+	%INCLUDE MPL_vars	
+
+ROUTINE Get_IReg (Number : INTEGER) :INTEGER FROM FunktLib
+ROUTINE Get_RReg (Number : INTEGER) :REAL FROM FunktLib
+
+BEGIN	
+
+SELECT Get_Ireg(178) OF
+	
+		CASE(11):
+			mp[1]=$MNUTOOL[1, 1]
+			mp[1].x=mp[1].x+Get_RReg(177)
+			$MNUTOOL[1, 1]=mp[1]
+		
+		CASE(13):
+			mp[1]=$MNUTOOL[1, 3]
+			mp[1].x=mp[1].x+Get_RReg(177)
+			$MNUTOOL[1, 3]=mp[1]
+		
+		CASE(31):
+			mp[1]=$MNUTOOL[3, 1]
+			mp[1].x=mp[1].x+Get_RReg(177)
+			$MNUTOOL[3, 1]=mp[1]
+		
+		CASE(33):
+			mp[1]=$MNUTOOL[3, 3]
+			mp[1].x=mp[1].x+Get_RReg(177)
+			$MNUTOOL[3, 3]=mp[1]
+ENDSELECT
+		         
+	
+END cal_adjust
+ 
+ 

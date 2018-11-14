@@ -1,0 +1,383 @@
+
+-- -- -- -- --     Project config  -- -- -- -- --
+-----------------------------------------------------------------------------------------
+PROGRAM Proj_conf
+	%NOPAUSESHFT
+	%NOPAUSE = ERROR + TPENABLE
+	%NOABORT = ERROR 
+	%NOLOCKGROUP
+
+TYPE
+	%INCLUDE Types
+
+VAR
+	%INCLUDE Gvars
+	%INCLUDE MPL_vars
+	
+	i: INTEGER
+		
+
+ROUTINE Get_IReg (Number : INTEGER) :INTEGER FROM FunktLib
+ROUTINE Get_RReg (Number : INTEGER) :REAL FROM FunktLib
+ROUTINE Set_IReg (Number : INTEGER; Value : INTEGER) FROM FunktLib
+ROUTINE Set_RReg (Number : INTEGER; Value : REAL) FROM FunktLib
+
+ROUTINE IO_Set FROM Proj_conf
+ROUTINE Task_qen FROM proj_conf
+ROUTINE Resetall FROM proj_conf
+
+
+
+-- ***********************************************************************************************
+-- ROUTINE -->> Generates all Tasks
+-- ***********************************************************************************************
+ROUTINE Task_qen
+BEGIN
+
+-->> Generate the tasklist -------------------
+
+	FOR i = 1 TO 31 DO
+	            TaskList1[i].Enabled = TRUE
+	            TaskList3[i].Enabled = TRUE
+	            Tasklist1[i].Done=FALSE
+	            Tasklist3[i].Done=FALSE
+	            Tasklist1[i].pretask=0
+	            Tasklist3[i].pretask=0
+            
+	ENDFOR   	 
+	
+	-- Disabling task for shift welding
+	FOR i = 9 TO 17 DO
+	            TaskList1[i].Enabled = FALSE
+	            TaskList3[i].Enabled = FALSE
+	ENDFOR
+	
+	-- Disabling task for shift welding
+	FOR i = 25 TO 30 DO
+	            TaskList1[i].Enabled = FALSE
+	            TaskList3[i].Enabled = FALSE
+	ENDFOR
+	
+	--------------- Task 1 ---------------
+	i=1
+	TaskList1[i].name = 'fold1'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'fold3'	
+	TaskList3[i].PreTask = 0
+	
+	--------------- Task 2 ---------------
+	i=i+1 --- Scanning
+	TaskList1[i].name = 'scanning'	
+	TaskList1[i].PreTask = 1
+	--TaskList1[i].enabled = FALSE
+	TaskList3[i].name = ''	
+	TaskList3[i].enabled = FALSE
+	
+	-- only scanning before first profile
+	jobno=Get_Ireg(230)
+	IF ((Jobno <> 1) OR (Restart_pro=TRUE)) THEN
+		TaskList1[i].enabled = FALSE
+	ENDIF
+	
+	--------------- Task 3 ---------------
+	i=i+1
+	TaskList1[i].name = 'init_pos'	
+	TaskList1[i].PreTask = 1
+	TaskList3[i].name = ''
+	TaskList3[i].PreTask = 3
+	TaskList3[i].enabled = FALSE
+	
+	--------------- Task 4---------------
+	i=i+1
+	TaskList1[i].name = 'unfold1'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'Clean3'	
+	TaskList3[i].PreTask = 3
+	
+	--------------- Task 5 ---------------
+	i=i+1
+	TaskList1[i].name = 'ALPT1'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'ALPT1'
+	TaskList3[i].PreTask = 6
+
+	--------------- Task 6 ---------------
+	i=i+1
+	TaskList1[i].name = 'ALPT2'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'ALPT2'
+	TaskList3[i].PreTask = 0
+	
+	--------------- Task 7 ---------------
+	--Vertikal up welding
+	i=i+1
+	TaskList1[i].name = 'PF_Main1'	
+	TaskList1[i].PreTask = 6
+	TaskList3[i].name = 'PB_WEB3'	
+	TaskList3[i].PreTask = 0
+	
+	
+	--------------- Task 8 ---------------
+	-- web welding
+	i=i+1
+	TaskList1[i].name = 'PB_web1'	
+	TaskList1[i].PreTask = 0	
+	TaskList3[i].name = 'Pf_main3'	
+	TaskList3[i].PreTask = 0
+	
+	
+	-- ******* Robot working on oposite side***********
+	--------------- Task 9 ---------------
+	i=i+1
+	TaskList1[i].name = 'PB_End1'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'PB_End3'
+	TaskList3[i].PreTask = 0
+	
+	--------------- Task 10 ---------------
+	i=i+1
+	TaskList1[i].name = 'shift1'	--fold,shift, unfold
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'shift3'
+	TaskList3[i].PreTask = 0
+	
+	--------------- Task 11 ---------------
+	i=i+1
+	TaskList1[i].name = 'ALPT1'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'ALPT1'
+	TaskList3[i].PreTask = 0
+
+	--------------- Task 12 ---------------
+	i=i+1
+	TaskList1[i].name = 'ALPT2'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'ALPT2'
+	TaskList3[i].PreTask = 0
+	
+	--------------- Task 13 ---------------
+	i=i+1
+		--Vertikal up welding
+	TaskList1[i].name = 'PF_main1'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'PF_Main3'
+	TaskList3[i].PreTask = 0
+	
+	--------------- Task 14 ---------------
+	-- web welding
+	i=i+1
+	TaskList1[i].name = 'PB_web1'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'PB_web3'
+	TaskList3[i].PreTask = 0
+	
+	
+	--------------- Task 15---------------
+	i=i+1
+	TaskList1[i].name = 'PB_End1'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'PB_End3'
+	TaskList3[i].PreTask = 0	
+	 
+	--------------- Task 16---------------
+	i=i+1
+	TaskList1[i].name = 'shiftB1' -- shift back	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'ShiftB3' --  shift back
+	TaskList3[i].PreTask = 0
+
+	--------------- Task 17  ---------------
+	-- not used
+	i=i+1
+	TaskList1[i].name = 'unfold1' -- unfold	
+	TaskList1[i].PreTask = 0
+	TaskList1[i].enabled = FALSE
+	TaskList3[i].name = 'unfold3' -- unfold
+	TaskList3[i].PreTask = 15
+	TaskList3[i].enabled = FALSE
+	
+--- ****************************************
+
+	--------------- Task 18---------------
+	--Main welding of profile
+	i=i+1
+	TaskList1[i].name = 'PB_Main'	
+	TaskList1[i].PreTask = 17
+	TaskList3[i].name = ''	
+	TaskList3[i].enabled = FALSE
+	TaskList3[i].PreTask = 18
+	
+-- ****************  End of profile  **********************
+	
+	--------------- Task 19 ---------------
+	i=i+1
+	TaskList1[i].name = 'ALPT1'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'CLEAN3'
+	TaskList3[i].PreTask = 18
+
+	--5
+	i=i+1
+	--------------- Task 20 ---------------
+	TaskList1[i].name = 'ALPT2'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'ALPT1'
+	TaskList3[i].PreTask = 20
+	
+	
+	--------------- Task 21 ---------------
+	i=i+1
+	TaskList1[i].name = 'clean1'
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'ALPT2'
+	TaskList3[i].PreTask = 0
+	
+	
+	--------------- Task 22 ---------------
+	-- Welding of end/web
+	i=i+1
+	TaskList1[i].name = 'PF_Main1'	
+	TaskList1[i].PreTask = 21
+	TaskList3[i].name =  'PB_web3'
+	TaskList3[i].PreTask = 0
+	
+	----------------- Task 23 ---------------
+	--web welding
+	i=i+1
+	TaskList1[i].name = 'PB_web1'	
+	TaskList1[i].PreTask = 0	
+	TaskList3[i].name = 'PF_Main3'	
+	TaskList3[i].PreTask = 22
+
+	--------------- Task 24 ---------------
+	i=i+1
+	TaskList1[i].name ='PB_end1'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'PB_end3'		
+	TaskList3[i].PreTask = 0
+	
+	-- ******* Robot working on oposite side***********
+
+	--------------- Task 25 ---------------
+	i=i+1
+	TaskList1[i].name = 'shift1'	--fold,shift, unfold
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'shift3'
+	TaskList3[i].PreTask = 0
+	
+	--------------- Task 26---------------
+	i=i+1
+	TaskList1[i].name = 'ALPT1'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'ALPT1'
+	TaskList3[i].PreTask = 19
+
+	--5
+	i=i+1
+	--------------- Task 27---------------
+	TaskList1[i].name = 'ALPT2'	
+	TaskList1[i].PreTask = 19
+	TaskList3[i].name = 'ALPT2'
+	TaskList3[i].PreTask = 20
+
+	--------------- Task 28 ---------------
+	i=i+1
+		--Vertikal up welding
+	TaskList1[i].name = 'PF_main1'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'PF_Main3'
+	TaskList3[i].PreTask = 0
+	
+	--------------- Task 29---------------
+	-- web welding
+	i=i+1
+	TaskList1[i].name = 'PB_web1'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'PB_web3'
+	TaskList3[i].PreTask = 0
+	
+	
+	--------------- Task 30---------------
+	i=i+1
+	TaskList1[i].name = 'PB_End1'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'PB_End3'
+	TaskList3[i].PreTask = 0	
+	
+--- ****************************************
+
+	--------------- Task 31---------------
+	i=i+1
+	TaskList1[i].name = 'clean1'	
+	TaskList1[i].PreTask = 0
+	TaskList3[i].name = 'fold3'	
+	TaskList3[i].PreTask = 0
+	
+	TaskNr1Max=i
+	TaskNr3Max=i
+	
+END Task_qen
+
+
+-- ***********************************************************************************************
+-- ROUTINE -->>  IO_set
+-- ***********************************************************************************************
+ROUTINE IO_set
+BEGIN
+
+-- System internal
+	O_SysFault = 82
+	O_Imstp = 85	
+	O_Hold = 86
+	O_FaultRes = 87
+	O_Start = 88
+		
+	--Weld enable
+	O_WeldEnb = 95
+
+	-- Sensing and Cooilng
+	O_SLaser1=136
+	O_SLaser2 =128
+	
+	O_Scanner =130
+	
+	I_SLaser1=135
+	I_SLaser2=127
+	
+	IA_SLaser1=4
+	IA_SLaser2=2
+	
+	RO_laserlit1=1
+	RO_laserlit2=9
+		
+	RO_airCool1=3
+	RO_airCool2=11
+	
+	O_SensEnd=105				
+	O_SensStop=106
+	
+	I_arc_R1=252
+	I_arc_R3=404
+	O_TouchSens1=256
+	O_TouchSens2=408
+	O_Clean1 = 254
+	O_clean3 = 406
+	
+	
+	O_R1=101
+	O_R3=103
+
+	--LIgths
+	O_Sgl1=125
+	O_Syl1=126
+	O_Srl1=133
+	O_Sgl2=123
+	O_Syl2=124
+	O_Srl2=131
+
+	O_Scan=130 -- power scanners
+
+END IO_set
+
+BEGIN
+END Proj_conf

@@ -1,0 +1,86 @@
+/PROG  PB_END12
+/ATTR
+OWNER		= MNEDITOR;
+COMMENT		= "";
+PROG_SIZE	= 1253;
+CREATE		= DATE 10-08-05  TIME 14:56:58;
+MODIFIED	= DATE 18-03-09  TIME 10:16:30;
+FILE_NAME	= ;
+VERSION		= 0;
+LINE_COUNT	= 54;
+MEMORY_SIZE	= 1669;
+PROTECT		= READ_WRITE;
+TCD:  STACK_SIZE	= 0,
+      TASK_PRIORITY	= 50,
+      TIME_SLICE	= 0,
+      BUSY_LAMP_OFF	= 0,
+      ABORT_REQUEST	= 0,
+      PAUSE_REQUEST	= 0;
+DEFAULT_GROUP	= 1,1,*,*,*;
+CONTROL_CODE	= 00000000 00000000;
+/APPL
+  ARC : TRUE ; 
+  ARC Welding Equipment : 1,*,*,*,*;
+
+MPAS ;
+MPAS_NUM_PASSES        : 0;
+MPAS_LAST_PASS         : 0;
+MPAS_CURRENT_PASS      : 0;
+MPAS_STATUS_PASS       : 0;
+/MN
+   1:  JMP LBL[555] ;
+   2:  R[151]=0    ;
+   3:  LBL[555] ;
+   4:  !************************** ;
+   5:  !** WELD end back with gantry ;
+   6:  !************************** ;
+   7:   ;
+   8:  !skip end of T-bar slopes ;
+   9:  IF ((R[289]=1) AND (R[95]=1)) THEN ;
+  10:  WAIT   2.00(sec) ;
+  11:  JMP LBL[999] ;
+  12:  ENDIF ;
+  13:   ;
+  14:  !-- AT RESUME JMP TO LABEL ;
+  15:  IF ((R[151]>200)),JMP LBL[R[151]] ;
+  16:   ;
+  17:  UFRAME_NUM=1 ;
+  18:  UTOOL_NUM=1 ;
+  19:   ;
+  20:  LBL[201] ;
+  21:  R[151]=201    ;
+  22:  !Store gantry point ;
+  23:  PR[18]=LPOS    ;
+  24:  PR[GP2:15,1]=PR[GP2:18,1]    ;
+  25:   ;
+  26:  ! Calc Points ;
+  27:  R[134]=PR[GP1:15,1]    ;
+  28:  IF (R[134]<(-140)) THEN ;
+  29:  PR[GP1:15,1]=(-120)    ;
+  30:  PR[GP2:15,1]=(PR[GP2:15,1]-((-120)-R[134])) ;
+  31:  ENDIF ;
+  32:   ;
+  33:   ;
+  34:   ;
+  35:  ! Weld using gantry ;
+  36:  LBL[202] ;
+  37:  R[151]=202    ;
+  38:  Weave Sine[1] ;
+  39:  Track TAST[R[21]] ;
+  40:  Weld Start E1[1,R[111],E0] ;
+  41:L PR[15] R[126]cm/min FINE COORD    ;
+  42:  Weave End[1] ;
+  43:  Track End ;
+  44:  Weld End E1[1,R[111]] ;
+  45:   ;
+  46:  ! move back with gantry ;
+  47:  PR[17]=LPOS    ;
+  48:  PR[GP2:17,1]=PR[GP2:18,1]    ;
+  49:L PR[17] 100mm/sec FINE COORD    ;
+  50:  LBL[999] ;
+  51:   ;
+  52:  R[151]=0    ;
+  53:   ;
+  54:  LBL[1000] ;
+/POS
+/END

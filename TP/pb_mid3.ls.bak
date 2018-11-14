@@ -1,0 +1,128 @@
+/PROG  PB_MID3
+/ATTR
+OWNER		= MNEDITOR;
+COMMENT		= "";
+PROG_SIZE	= 2119;
+CREATE		= DATE 17-06-29  TIME 15:42:28;
+MODIFIED	= DATE 18-02-14  TIME 09:46:00;
+FILE_NAME	= PB_MID1;
+VERSION		= 0;
+LINE_COUNT	= 89;
+MEMORY_SIZE	= 2531;
+PROTECT		= READ_WRITE;
+TCD:  STACK_SIZE	= 0,
+      TASK_PRIORITY	= 50,
+      TIME_SLICE	= 0,
+      BUSY_LAMP_OFF	= 0,
+      ABORT_REQUEST	= 0,
+      PAUSE_REQUEST	= 0;
+DEFAULT_GROUP	= *,*,1,*,*;
+CONTROL_CODE	= 00000000 00000000;
+/APPL
+  ARC : TRUE ; 
+  ARC Welding Equipment : *,1,*,*,*;
+
+MPAS ;
+MPAS_NUM_PASSES        : 0;
+MPAS_LAST_PASS         : 0;
+MPAS_CURRENT_PASS      : 0;
+MPAS_STATUS_PASS       : 0;
+/MN
+   1:  JMP LBL[555] ;
+   2:  R[153]=0    ;
+   3:  LBL[555] ;
+   4:  !************************** ;
+   5:  !** Start middle of profile ;
+   6:  !************************** ;
+   7:   ;
+   8:  UFRAME_NUM=2 ;
+   9:  UTOOL_NUM=1 ;
+  10:  Weave End ;
+  11:  Track End ;
+  12:   ;
+  13:   ;
+  14:  !-- AT RESUME JMP TO LABEL ;
+  15:  IF ((R[153]>0)),JMP LBL[R[153]] ;
+  16:   ;
+  17:   ;
+  18:  !****************************** ;
+  19:  !--   ANGLE CALC  -- ;
+  20:  !****************************** ;
+  21:  !* FUT 000 OR FUT 00-1 (PR[43-44) ;
+  22:   ;
+  23:  !***  POSITION CALC START ;
+  24:  R[105]=(60+(R[95]*10)) ;
+  25:   ;
+  26:  !***  CONFIG CALC ;
+  27:  R[106]=43    ;
+  28:  IF (R[95]=(1)),R[106]=(45) ;
+  29:   ;
+  30:  CALL PRG_CALC3    ;
+  31:   ;
+  32:  !**************************** ;
+  33:  !**** Start middle of profile ;
+  34:  !**** POSITION CALC & WELDING ;
+  35:  !**************************** ;
+  36:   ;
+  37:  !-- SAFE START  POINT ;
+  38:  R[145]=0    ;
+  39:  R[146]=50    ;
+  40:  CALL PRG_CALC3    ;
+  41:  R[104]=R[105]+1    ;
+  42:  PR[35]=PR[21]+PR[R[104]]    ;
+      :if (R[264]=8), then ;
+    42:  PR[35]=PR[23]+PR[R[104]]    ;
+    :endif;
+  43:  PR[35,1]=PR[35,1]+R[145]    ;
+  44:  PR[35,2]=PR[35,2]+R[146]    ;
+  45:  PR[35,3]=PR[35,3]+20    ;
+  46:  !------- ;
+  47:   ;
+  48:  !--  WELDING  POINT 1 ;
+  49:  !profile thickness ;
+  50:  R[145]=0    ;
+  51:  R[146]=0    ;
+  52:  CALL PRG_CALC3    ;
+  53:  R[104]=R[105]+1    ;
+  54:  PR[1]=PR[21]+PR[R[104]]    ;
+      :if (R[264]=8), then ;
+    42:  PR[1]=PR[23]+PR[R[104]]    ;
+      50:  R[145]=5    ;
+    :endif;
+  55:  PR[1,1]=PR[1,1]+R[145]    ;
+  56:  PR[1,2]=PR[1,2]+R[146]    ;
+  57:  PR[1,3]=PR[1,3]+R[146]    ;
+  58:  !------- ;
+  59:   ;
+  60:  !---------------------------- ;
+  61:  ! ***** WELDING ***** ;
+  62:   ;
+  63:  !-- MOVE TO SAFE START ;
+  64:   ;
+  65:  ! wait for robot 1 has moved away ;
+  66:  IF (R[95]=1 AND R[290]=0) THEN ;
+  67:  WAIT (R[221]=23 OR R[221]=30)    ;
+  68:  IF (R[221]=23) THEN ;
+  69:  WAIT (R[75]=1 OR R[221]<>23)    ;
+  70:  ENDIF ;
+  71:L PR[35] 150mm/sec CNT50    ;
+  72:  WAIT (R[468]*(-1)>R[93] OR R[221]<>23)    ;
+  73:  ELSE ;
+  74:L PR[35] 150mm/sec CNT50    ;
+  75:  ENDIF ;
+  76:   ;
+  77:  !** -------------------  ** ;
+  78:   ;
+  79:  !-- MOVE TO WELD START ;
+  80:  R[164]=1    ;
+  81:   ;
+  82:  LBL[11] ;
+  83:  R[153]=11    ;
+  84:   ;
+  85:L PR[1] 150mm/sec FINE    ;
+  86:   ;
+  87:  LBL[999] ;
+  88:  R[153]=0    ;
+  89:   ;
+/POS
+/END

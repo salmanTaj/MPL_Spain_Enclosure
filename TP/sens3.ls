@@ -1,0 +1,42 @@
+/PROG  SENS3
+/ATTR
+OWNER		= MNEDITOR;
+COMMENT		= "";
+PROG_SIZE	= 417;
+CREATE		= DATE 17-03-17  TIME 09:22:20;
+MODIFIED	= DATE 18-01-30  TIME 13:47:16;
+FILE_NAME	= SENS1;
+VERSION		= 0;
+LINE_COUNT	= 16;
+MEMORY_SIZE	= 857;
+PROTECT		= READ_WRITE;
+TCD:  STACK_SIZE	= 0,
+      TASK_PRIORITY	= 50,
+      TIME_SLICE	= 0,
+      BUSY_LAMP_OFF	= 0,
+      ABORT_REQUEST	= 0,
+      PAUSE_REQUEST	= 0;
+DEFAULT_GROUP	= *,*,1,*,*;
+CONTROL_CODE	= 00000000 00000000;
+/APPL
+  ARC : TRUE ; 
+  ARC Welding Equipment : 1,*,*,*,*;
+/MN
+   1:  UFRAME_NUM=R[96] ;
+   2:  UTOOL_NUM=3 ;
+   3:  DO[105]=(OFF) ;
+   4:  DO[106]=(OFF) ;
+   5:   ;
+   6:  SKIP CONDITION DO[106]=ON    ;
+   7:   ;
+   8:L PR[10] R[85]mm/sec FINE Skip,LBL[1]    ;
+   9:   ;
+  10:  JMP LBL[2] ;
+  11:   ;
+  12:  LBL[1] ;
+  13:  DO[105]=(ON) ;
+  14:   ;
+  15:  LBL[2] ;
+  16:  //UTOOL_NUM=1 ;
+/POS
+/END

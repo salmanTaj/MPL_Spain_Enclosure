@@ -1,0 +1,1470 @@
+PROGRAM WeldPerf
+
+%COMMENT = 'Vers. 1.0-rafa'
+	%NOPAUSESHFT
+	%NOPAUSE = ERROR + TPENABLE
+	%NOABORT = ERROR 
+	--%NOLOCKGROUP
+
+TYPE
+	%INCLUDE Types
+	
+
+VAR
+	%INCLUDE Gvars
+	%INCLUDE MPL_Vars
+	
+	file_var : FILE
+	FileName, name		FROM WeldPerf: STRING[30]
+		STATUS : INTEGER
+	i,n	: INTEGER -- loop counter
+	NumStr : STRING[3]
+	Cxy,Cheigth : REAL
+	Cside,Crat : INTEGER
+	realtemp: REAL
+	realtemp2, realtemp3, dist4,dist5: REAL
+	Booltemp: BOOLEAN
+	
+	
+	--STATUS  		FROM FunktLib: INTEGER 		-- The status of the operation of GET_REG
+	Bool 			FROM FunktLib: BOOLEAN		-- Recieves flag IF reg value is a REAL
+	Int				FROM FunktLib: INTEGER		-- Contains reg val if an Integer		
+	Reall			FROM FunktLib: REAL			-- Contains reg val if a Real
+	text1 			FROM funktlib:STRING[1]
+	fjntArr 		FROM funktlib :ARRAY[9] OF REAL  --JArr
+	Pos_Eval 	FROM FunktLib :Pos_Chk	
+	Move_Pos	FROM FunktLib :Pos_Chk
+	test FROM funktlib: INTEGER
+	Point, Point1 ,point3, point2	FROM funktlib :XYZWPREXT
+	Point9  :XYZWPR
+	Jpoint2 FROM funktlib :JOINTPOS
+	errorval FROM FunktLib :INTEGER
+	posdest FROM funktlib :XYZWPREXT
+	
+	
+	Retract FROM funktlib: INTEGER  -- temp
+	SearcSign FROM funktlib: BOOLEAN --temp
+	 
+	 
+
+ROUTINE Get_IReg (Number : INTEGER) :INTEGER FROM FunktLib
+ROUTINE Get_RReg (Number : INTEGER) :REAL FROM FunktLib
+ROUTINE Set_IReg (Number : INTEGER; Value : INTEGER) FROM FunktLib
+ROUTINE Set_RReg (Number : INTEGER; Value : REAL) FROM FunktLib
+ROUTINE Def_PR (OutNr   : INTEGER; ReqD :INTEGER;ReqL:REAL;G1: INTEGER; G2:INTEGER; G3:INTEGER) FROM FunktLib
+ROUTINE Act_Pos(MPNr   : INTEGER;rob : INTEGER) FROM FunktLib -- put aktuelle position i MP [nummer]
+ROUTINE Motion(PosDest:XYZWPREXT;ForceCh:INTEGER) FROM FunktLib
+
+-- test sensning
+ROUTINE Searching(DirNum:INTEGER; SearchLen:INTEGER; Retract:INTEGER;SearcSign: BOOLEAN;Err_Cond:INTEGER):REAL FROM FunktLib
+ROUTINE ReadFile FROM weldperf
+ROUTINE Readcross FROM weldperf
+
+
+---------------------------------------------------------------------------------------------------------
+-- ROUTINE ReadFile 
+--  Reads panel file
+---------------------------------------------------------------------------------------------------------
+ROUTINE ReadFile 
+VAR
+no1 :INTEGER
+
+BEGIN
+	FileName =  'fr:\profiles.txt'
+	
+	IF get_ireg(492)=1 THEN
+		FileName =  'fr:\profiles1.txt'
+	ENDIF
+	IF get_ireg(492)=2 THEN
+		FileName =  'fr:\profiles2.txt'
+	ENDIF
+	IF get_ireg(492)=3 THEN
+		FileName =  'fr:\profiles3.txt'
+	ENDIF
+
+	OPEN FILE file_var ('RO', FileName)
+	STATUS = IO_STATUS(file_var)
+	IF STATUS = 0 THEN 
+		i=0
+		REPEAT
+			i=i+1
+			--nn=i
+			IF STATUS = 0 THEN
+				-- læser værdierne fra hver linje ind i de respektive variabel navne
+				READ file_var(profile[i].x1, profile[i].y1, profile[i].top1, profile[i].end1, profile[i].FL11,profile[i].FL12, profile[i].STop1, profile[i].SFL11, profile[i].SFL12, profile[i].SLength11, profile[i].SLength12,
+							     profile[i].x2, profile[i].y2, profile[i].top2, profile[i].end2, profile[i].FL21,profile[i].FL22, profile[i].STop2, profile[i].SFL21, profile[i].SFL22, profile[i].SLength21,profile[i].SLength22,
+							     profile[i].crossno)
+					
+				STATUS = IO_STATUS(file_var)	
+				
+			ENDIF	
+
+		UNTIL STATUS <>0
+		Set_IReg(231,i-1)
+	ENDIF	
+	CLOSE FILE file_var
+
+END ReadFile
+---------------------------------------------------------------------------------------------------------
+-- ROUTINE Readcross
+--  Reads cross file for profile
+----------------------------------------------------------------------------------------------------
+ROUTINE Readcross
+VAR
+no1 :INTEGER
+
+BEGIN
+	CNV_INT_STR(jobNo,1,0,NumStr)
+	i = STR_LEN(NumStr)
+	NumStr = SUB_STR(NumStr,2,i-1)
+
+	FileName =  'fr:\cross'+ numstr + '.txt'
+	
+	IF swap_end = FALSE THEN
+		OPEN FILE file_var ('RO', FileName)
+		STATUS = IO_STATUS(file_var)
+		IF STATUS = 0 THEN 
+			i=0
+			REPEAT
+				i=i+1
+				--nn=i
+				IF STATUS = 0 THEN
+					-- læser værdierne fra hver linje ind i de respektive variabel navne
+					READ file_var(cross[i].xy,cross[i].side,cross[i].heigth,cross[i].rat)
+						
+					STATUS = IO_STATUS(file_var)	
+					
+				ENDIF	
+	
+			UNTIL STATUS <>0
+			
+		ENDIF	
+		CLOSE FILE file_var
+	ENDIF
+	
+	-- swap direction depending on Profile dir.
+	IF swap_end = TRUE THEN
+		OPEN FILE file_var ('RO', FileName)
+		STATUS = IO_STATUS(file_var)
+		IF STATUS = 0 THEN 
+			
+			n=profile[jobno].crossno
+			Cxy = 0
+			Cside=0
+			Cheigth=0
+			Crat=0
+			FOR i = 1 TO profile[jobno].crossno DO 
+				READ file_var(Cxy,Cside,Cheigth,Crat)
+				cross[n].xy=Cxy
+				cross[n].side=Cside
+				cross[n].heigth=Cheigth
+				cross[n].rat=Crat
+				n=n-1
+			ENDFOR
+		ENDIF	
+		CLOSE FILE file_var
+	ENDIF
+
+END Readcross
+
+----------------------------------------------------------------------------------------------------
+
+BEGIN
+
+
+$GROUP[1].$UFRAME = $MNUFRAME[1, 1] 
+$GROUP[2].$UFRAME = $MNUFRAME[2, 1] 
+$GROUP[3].$UFRAME = $MNUFRAME[3, 1] 
+$GROUP[1].$UTOOL = $MNUTOOL[1, 1]
+$GROUP[2].$UTOOL = $MNUTOOL[2, 1]
+$GROUP[3].$UTOOL = $MNUTOOL[3, 1]
+
+-- reading values from registers
+
+KL_step=Get_IReg(69)
+TP_step =Get_IReg(70)
+KL_stepN=Get_IReg(71)
+Weld_step =Get_IReg(87)
+
+
+
+-- *********************************************************
+--***************** Selecting Next  Step**************
+-- *********************************************************
+KL_stepP=KL_step
+set_IReg(72,KL_stepP)
+kl_step=KL_stepN
+
+SELECT KL_step OF
+	
+	
+	CASE (0):
+		KL_step=10  -- init pos
+		--temp
+		Cross_num=0
+		Cross_cnt=0
+		KL_stepN=20
+		
+	CASE (20): 
+		Done = FALSE -- 
+		cross_cnt=0
+		KL_stepN=21-- Continue welding	
+		
+	CASE (21): 
+		Done = FALSE -- 
+		KL_stepN=35-- Continue welding
+		
+	CASE (30): 
+		Done = FALSE -- 
+		KL_stepN=31-- angle up R3
+		IF end_type=3 THEN 
+			KL_stepN=35
+		ENDIF
+		
+		--resetting counters
+		
+	CASE (31): 
+		
+		KL_stepN=35-- Continue welding
+		IF PLeng < 300 THEN -- stop for short profiles
+			KL_stepN=999
+		ENDIF
+		
+	CASE (35):
+			
+			--- Endpoints if no crossings--------
+			IF PLeng > 750 THEN 
+				realtemp = 0 --temp
+			else 
+				realtemp = 0
+			ENDIF 
+			
+			-- bigger end distance for T-bars with slope
+			
+			IF Get_Ireg(289) = 1 THEN 
+				realtemp = 100 --temp
+				--disable weld back
+				  TaskList1[22].Enabled = FALSE
+				   TaskList3[22].Enabled = FALSE
+			ENDIF 
+			
+					-- 2017-10-30 Bilbao overlap -> bigger distance
+			IF (stop2 = 0) THEN 
+				--realtemp=100
+			ENDIF
+		
+			IF XY_dir = 1 THEN 
+				end_point=X_end-((Start_dis+realtemp)*X_dir)-- ikke helt rigtig. tager i højde for profilets vinkel
+			else
+				end_point=Y_end-((Start_dis+realtemp)*Y_dir) -- ikke helt rigtig. tager i højde for profilets vinkel
+			ENDIF
+			
+			
+			
+						
+			--- Endpoints for crossing----
+			
+			IF  ((Cross_num <> 0) AND (Cross_cnt <= Cross_num)) THEN						
+							
+				IF cross_cnt = 0 THEN
+					cross_cnt=1
+					--readcross -- get cross file. loaded in step 10
+				ENDIF 
+							
+				IF cross[cross_cnt].rat=1 THEN -- temp. distance for rat holes
+					cross_dis=100
+				else
+					Cross_dis =Get_RReg(91)
+				ENDIF 
+				
+				
+					-- do not look at robots position 
+					-- if first cross
+					
+					IF (cross_cnt =1) THEN 
+						IF XY_dir = 1 THEN-- x profile
+							dist4=ABS(X_start-cross[cross_cnt].xy)
+						else
+							--Y-profile
+							dist4=ABS(Y_start-cross[cross_cnt].xy)
+						ENDIF
+							
+					else
+						-- cross_cnt > 1
+						dist4=ABS(cross[cross_cnt].xy-cross[cross_cnt-1].xy)
+					ENDIF
+					
+					-- always use 400 mm as distance, if  less than 800 mm use ½ as distance
+					IF dist4 < cross_dis*2 THEN 
+						dist5 = dist4/2
+					else
+						IF dist4<900 THEN 
+							dist5=300 -- use less
+						else
+							dist5=cross_dis -- normal 400
+						ENDIF					
+					ENDIF
+					
+				IF XY_dir = 1 THEN-- x profile
+					end_point=cross[cross_cnt].xy-(dist5*X_dir)
+					IF cross[cross_cnt].rat=1 THEN 
+						end_point=cross[cross_cnt].xy-(cross_dis*x_dir)
+					ENDIF
+				else
+					--Y-profile
+					end_point=cross[cross_cnt].xy-(dist5*Y_dir)
+					IF cross[cross_cnt].rat=1 THEN 
+						end_point=cross[cross_cnt].xy-(cross_dis*Y_dir)
+					ENDIF
+				ENDIF
+				
+				-- Ratholes
+				
+				IF cross[cross_cnt].rat=1 THEN
+						KL_step=52 -- R3 needs to catch up first
+						KL_stepN=55
+				ENDIF
+				
+					-- Setting Robot to jump over profile
+			
+				robot=1
+				set_IReg(84,0)	--if no robot is jumping
+				IF  ((Cross_num <> 0) AND (Cross_cnt <= Cross_num)) THEN
+						IF  (XY_dir = 1) THEN -- profile dir
+							IF (cross[cross_cnt].side = 1)  THEN
+									robot=3
+								else
+								robot = 1
+							ENDIF
+						ENDIF
+						IF  (XY_dir = 2) THEN -- profile dir
+							IF (cross[cross_cnt].side = 1)  THEN
+									robot=1
+								else
+									robot=3
+							ENDIF
+						ENDIF
+						set_IReg(84,robot)
+						
+						IF (cross[cross_cnt].side = 2)  THEN -- Borth robots jumping
+							robot=1
+							set_IReg(84,4)
+						ENDIF
+				ENDIF
+				
+			ENDIF			
+			
+			-- full welding, no X gantry------------------------------------------
+			IF ((X_flag=0) AND (Weld_step=0)) THEN
+				KL_step=40			
+				KL_stepN=999						
+			ENDIF
+			
+			-- --Step welding ---------------------------
+			IF ((X_flag=0) AND (Weld_step=1)) THEN
+				KL_stepN=35
+				
+				SELECT KL_stepP OF -- what was last step
+					CASE(31): 
+						KL_step=41 -- weld long start 
+					CASE(41):
+						KL_step=52 -- robot 3 catch up
+					CASE(40):
+						KL_step=45 -- welding OFF
+					CASE(45):
+						KL_step=40 -- welding ON
+					CASE(52):
+						KL_step=45 -- Welding OFF
+						IF Get_Rreg(14)<10 THEN -- different pattern when plate is under  10 mm
+							KL_step=54 -- R1 move up
+						ENDIF
+					CASE(54):
+						KL_step=40 -- welding ON
+				else:	
+				ENDSELECT
+				
+				IF ((Done = TRUE) AND ((cross_cnt > Cross_num)or (cross_num=0))) THEN -- if welded TO END
+					Kl_step=999
+				ENDIF
+			ENDIF
+		
+			-- Cross handling for both step and full welding
+			-- Step 51 is enabled in the end of the program
+			SELECT KL_stepP OF
+				CASE (51):
+					KL_step=40 -- welding ON
+					KL_stepN=35
+				IF ((cross[cross_cnt-1].side=2))THEN -- if both robots jumped
+					KL_step=53
+				ENDIF
+				CASE (53):
+					KL_step=40
+			else:	
+			ENDSELECT
+		
+		
+		
+		CASE(51): --- Crossing
+			Done=FALSE
+			KL_step=51
+			KL_stepN=35
+			
+			IF ((cross[cross_cnt].side=2) AND (KL_stepP<>52)) THEN-- if both robots is jumping
+				KL_step=52 -- R3 needs to catch up first
+				KL_stepN=51
+				-- if last piece of profile is too shot then skip
+				
+				--****************** Skipping short Ends  ********************
+					--IF XY_dir = 1 THEN
+						--IF (ABS(X_end-cross[cross_cnt].xy)<(250+STart_dis)) THEN 
+							--KL_step=52
+							--KL_stepN=999
+							---- disable tasks
+							--FOR i=10 TO 14 DO
+								--TaskList1[i].enabled=FALSE
+								--TaskList3[i].enabled=FALSE
+							--ENDFOR
+						--ENDIF
+					--ENDIF
+					--
+					--IF XY_dir = 2 THEN
+						--IF (ABS(Y_end-cross[cross_cnt].xy)<(250+STart_dis)) THEN 
+							--KL_step=52
+							--KL_stepN=999						
+							--FOR i=10 TO 14 DO
+								--TaskList1[i].enabled=FALSE
+								--TaskList3[i].enabled=FALSE
+							--ENDFOR
+						--ENDIF
+					--ENDIF
+				
+				-- Handling of Rat holes
+				IF cross[cross_cnt].rat=1 THEN
+						KL_step=52 -- R3 needs to catch up first
+						KL_stepN=55
+				ENDIF
+				
+			ENDIF	
+			
+		CASE(55):-- handling of rat holes
+			Done=FALSE
+			KL_step=55
+			KL_stepN=20 -- start from beginning whit close edge
+			
+			-- skip ending if rat hole is too close to end
+			IF Get_Ireg(287)=1 THEN 
+				KL_stepN=999
+				--disable task if end cannot be sensed (SAT solution)
+				FOR i = 17 TO 27 DO
+			            TaskList1[i].Enabled = FALSE
+			            TaskList3[i].Enabled = FALSE
+				ENDFOR
+			ENDIF
+			
+				IF Get_Ireg(287)=2 THEN  -- just skip downhand  end
+					KL_stepN=999
+					--disable task if end cannot be sensed (SAT solution)
+				           TaskList1[22].Enabled = FALSE
+				            TaskList3[22].Enabled = FALSE
+				ENDIF
+			
+		CASE(999): --- End:
+		
+ENDSELECT
+
+set_IReg(69,KL_step)
+
+
+-- Robots internal X motion limit
+
+-- ******************************************************
+-- ***********************  Motion *********************
+-- ******************************************************
+
+-- ***********************  Initialization*********************
+
+IF KL_step=10 THEN
+	
+	startLabel::
+	--starting from end closest to robot
+	swap_end=FALSE	
+	
+	jobNo=get_ireg(230)
+	
+	IF get_Ireg(230)=1 THEN
+			ReadFile -- read panel file if first profile
+	ENDIF	
+	
+	X_start=profile[jobNo].x1
+	Y_start=profile[jobNo].y1
+	X_end=profile[jobNo].x2
+	Y_end=profile[jobNo].y2
+	ProEnd1 = profile[jobNo].end1
+	ProEnd2 = profile[jobNo].end2
+	FLP11=profile[jobNo].FL11
+	FLP12=profile[jobNo].FL12
+	SFL1O=profile[jobNo].SFL11
+	SFL1R=profile[jobNo].SFL12
+	SFL2R=profile[jobNo].SFL21
+	SFL2O=profile[jobNo].SFL22
+	Stop1=profile[jobNo].Stop1
+	Stop2=profile[jobNo].Stop2
+	
+	-- over all dimensions of the profile
+	-- Setting X diff
+	PDx =ABS(X_end -X_start )
+	set_RReg(77,Pdx)
+	X_flag=0
+	
+	
+	-- Setting Y diff
+	PDy=ABS(Y_end-Y_start)
+	set_RReg(78,Pdy)
+	
+	--Length
+	PLeng = SQRT(Pdx*Pdx+Pdy*Pdy)
+	set_RReg(79,Pleng)
+	
+
+	-- delta X and Y
+	swap_end=FALSE
+	PDx =ABS(X_end -X_start )
+	PDy=ABS(Y_end-Y_start)
+		
+	--Profile direction
+	IF Pdx>Pdy THEN
+		--X direction
+		act_pos(1,2)
+		IF ((ABS(mp[1].x - X_start))>(ABS(mp[1].x - X_end))) THEN
+			swap_end=TRUE -- swap endpoints
+		endif
+	else
+		--Y direction
+		act_pos(1,1)
+		IF ((ABS(mp[1].ext1 - Y_start))>(ABS(mp[1].ext1 - Y_end))) THEN
+			swap_end=TRUE -- swap endpoints
+		ENDIF
+	ENDIF
+	
+	IF (Pleng<500) THEN -- Short profiles with one side. Start at side
+		IF ((profile[jobno].stop1<>0) AND (profile[jobno].stop2=0)) THEN
+			swap_end=FALSE
+		ENDIF
+		IF ((profile[jobno].stop2<>0) AND (profile[jobno].stop1=0)) THEN
+			swap_end=TRUE
+		ENDIF		
+	ENDIF 
+	
+--*****************************************************
+--*****************  Crossings ************************
+--*****************************************************
+	-- Getting Crossing Max heigths
+	Set_RReg(67,0)
+	set_IReg(287,0) 
+	IF profile[jobNo].crossno <> 0 THEN
+		readcross -- get cross file
+		Cross_num=profile[jobNo].crossno
+			Max_CHigh=0
+		--Loop through crossings to find max
+		
+		FOR i = 1 TO  cross_num DO
+			IF Max_CHigh<cross[i].heigth THEN
+				Max_CHigh=cross[i].heigth
+			ENDIF
+			--looking at distrance from endpoint to rathole
+			IF Cross[i].rat = 1 THEN
+				-- looking at start
+				IF XY_dir = 1 THEN 
+					realtemp=ABS(X_start-Cross[i].xy)
+				else
+					realtemp=ABS(Y_start-Cross[i].xy)
+				ENDIF
+				
+				-- if rat to close to start, swap and skip end
+				IF realtemp < 250 THEN 
+					set_IReg(287,1) -- skip end register
+				ENDIF
+				
+				-- looking at start
+				IF XY_dir = 1 THEN 
+					realtemp2=ABS(X_end-Cross[i].xy)
+				else
+					realtemp2=ABS(Y_end-Cross[i].xy)
+				ENDIF
+				
+				-- if rat to close to start, swap and skip end
+				IF realtemp2 < 250 THEN 
+					set_IReg(287,1) -- skip end register
+				ENDIF
+				
+				-- if TP profiles we need bigger distance from rat hole
+				IF (ABS(FLP11-FLP12)>130) THEN
+					IF (realtemp2 < 400) THEN 
+						set_IReg(287,2) -- skip weld back
+					ENDIF
+				ENDIF
+				--
+				--compare start and end distance to rat hole
+				-- start at end with longest distance to rat hole
+				IF ((realtemp < realtemp2)) THEN 
+					swap_end=TRUE
+				ENDIF
+				IF ((realtemp > realtemp2)) THEN 
+					swap_end=FALSE
+				ENDIF
+			
+			ENDIF
+			
+		ENDFOR
+		
+		--IF ((Max_Chigh>Get_RReg(68)) AND (XY_dir = 1))THEN
+			--Set_RReg(67,1)
+		--ENDIF
+	ENDIF
+	
+	--*****************************************************
+	--*****************  Swapping direction **********************
+	--*****************************************************
+	-- Handling T-bars with slopedown to cross
+	-- overruling others
+	set_Ireg(289,0)
+	IF (ABS(FLP11-FLP12)>130) THEN
+			
+		IF ((stop1<>0) AND (stop2=0)) THEN 
+			swap_end = TRUE
+			set_Ireg(289,1) -- no weld back
+				
+			IF Pleng < 350 THEN -- not fore very short profiles
+				swap_end = FALSE
+				set_Ireg(289,0)
+			ENDIF
+			
+		ENDIF
+		
+		IF ((stop1=0) AND (stop2<>0)) THEN 
+			swap_end = FALSE
+			set_Ireg(289,1) -- no weld back
+			
+			IF Pleng < 350 THEN -- not fore very short profiles
+				swap_end = TRUE
+				set_Ireg(289,0)
+			ENDIF
+			
+		ENDIF
+		
+		
+	ENDIF
+	
+	IF swap_end = TRUE THEN -- swap direction
+		X_start=profile[jobNo].x2
+		Y_start=profile[jobNo].y2
+		X_end=profile[jobNo].x1
+		Y_end=profile[jobNo].y1
+		FLP11=profile[jobNo].FL21
+		FLP12=profile[jobNo].FL22
+	SFL1O=profile[jobNo].SFL21 -- temp : make sketch
+	SFL1R=profile[jobNo].SFL22
+	SFL2R=profile[jobNo].SFL11
+	SFL2O=profile[jobNo].SFL12
+		ProEnd1 = profile[jobNo].end2
+		ProEnd2 = profile[jobNo].end1
+		Stop1=profile[jobNo].Stop2
+		Stop2=profile[jobNo].Stop1
+		readcross -- get cross file in swapped order
+	ENDIF
+		
+	--user/inrotech input
+	X_limit=Get_RReg(64)
+	weld_off=Get_IReg(74)
+	ON_dis =Get_IReg(88)
+	OFF_dis =Get_IReg(89)
+	Lap =Get_IReg(90)
+	--Cross_dis =Get_RReg(91)
+	Cross_dis=400-- overrides cross_dis
+	--IF Get_Ireg(495)=21226 THEN -- temp for china fat
+		cross_dis=300 -- temp
+	--ENDIF
+	Set_Rreg(91,cross_dis)
+	Set_IReg(92,150)
+	--IF (low_ang1=1) THEN -- longer distance for low angls. 
+		--Set_IReg(92,150)
+	--ENDIF	
+	Start_dis =Get_IReg(92)
+
+	Robot_dis =Get_IReg(93)
+	Set_IReg(272,0)-- fold offset for R1
+	Set_IReg(273,0)-- fold offset for R3
+	
+	done = FALSE
+	
+	------------ Welding directions ----------------
+	-- X/Y direction
+	IF Pdx>Pdy THEN
+		XY_dir=1
+	else
+		XY_dir=2
+	ENDIF
+	Set_IReg(81,XY_dir)
+	
+	-- X +/- direction
+	IF X_end> X_start THEN
+			X_dir=1
+	else
+			X_dir=-1
+	ENDIF
+	Set_IReg(82,X_dir)
+	
+	-- Y +/- direction
+	IF Y_end > Y_start THEN
+		Y_dir=1
+	else
+		Y_dir=-1
+	ENDIF
+	Set_IReg(83,Y_dir)
+	
+	--- Angle of profile
+	IF XY_dir = 1 THEN
+		ang=ASIN(Pdy/Pleng)
+	else
+		ang=ASIN(Pdx/Pleng)
+	ENDIF
+	
+	--Temp fix for china FAT
+	IF Get_IReg(495)=21226 THEN 
+		IF XY_dir = 1 THEN
+			IF Stop1=0 THEN 
+				X_start=X_start-0*X_dir
+			ENDIF
+			IF Stop2=0 THEN 
+				X_end=X_end+0*X_dir
+			ENDIF
+		else
+			IF Stop1=0 THEN 
+				Y_start=Y_start-0*Y_dir
+			ENDIF
+			IF Stop2=0 THEN 
+				Y_end=Y_end+0*Y_dir
+			ENDIF
+		ENDIF
+	ENDIF
+	
+	--Temp fix for martin FAT
+	IF Get_IReg(495)=21232 THEN 
+		IF XY_dir = 1 THEN
+			IF Stop1=0 THEN 
+				X_start=X_start-Get_RReg(496)*X_dir
+			ENDIF
+			IF Stop2=0 THEN 
+				X_end=X_end+Get_RReg(497)*X_dir
+			ENDIF
+		else
+			IF Stop1=0 THEN 
+				Y_start=Y_start-0*Y_dir
+			ENDIF
+			IF Stop2=0 THEN 
+				Y_end=Y_end+0*Y_dir
+			ENDIF
+		ENDIF
+	ENDIF
+	
+	Set_RReg(67,0) -- never use arm opposite position
+		
+		-- Setting regisers from registers
+	Set_RReg(58,X_start)
+	Set_RReg(59,Y_start)
+	Set_RReg(60,X_end)
+	Set_RReg(61,Y_end)
+	
+	--*****************************************************
+	--*****************  Skipping short profiles********
+	--*****************************************************
+		
+	--****************** Skipping short X-profiles ********************
+		IF (XY_dir=1) THEN
+			
+			-- Skipping very short profiles
+			IF  (Pleng < 250) THEN 
+				Set_IReg(230,Get_IReg(230) +1) -- TEMP.. should be in taskman??
+				GOTO StartLabel
+			ENDIF
+			
+		--****************** Skipping short Start ends  ********************
+		-- temp FAT spanien
+		IF Get_Ireg(495)=21232 THEN 
+			IF ((ABS(X_start-cross[1].xy)<(250+STart_dis)) AND (cross[1].side=2)) THEN 
+				-- checking distances between other crosses
+				IF cross_num = 3 THEN -- skakbræt
+						Set_IReg(230,Get_IReg(230) +1) -- TEMP.. should be in taskman??
+						GOTO StartLabel
+				ENDIF
+				
+				IF cross_num = 1 THEN -- små dumme stykker
+						Set_IReg(230,Get_IReg(230) +1) -- TEMP.. should be in taskman??
+						GOTO StartLabel
+				ENDIF
+			ENDIF
+		endif
+	
+		ENDIF	
+		
+	--**********************************************************
+	--****** Using one Robot to weld both sides ********
+	--*********************************************************		
+-- 
+Set_IReg(290,0)
+swap_robot=FALSE
+IF XY_dir=1 THEN
+	-- Start  of profile R1
+	IF ((X_dir=1) AND (Stop1<>0))  THEN		
+		Set_IReg(290,1)
+		-- Disabling task for R3
+		FOR i = 4  TO 17  DO
+			TaskList3[i].enabled=FALSE
+		ENDFOR
+		-- Enabling extra task for R1
+		FOR i = 9 TO 17 DO
+			TaskList1[i].enabled=TRUE
+		ENDFOR
+	ENDIF
+	
+	IF ((X_dir=-1) AND (Stop1<>0))  THEN		
+	-- Start  of profile R3
+		Set_IReg(290,3)
+		-- Disabling task for R1
+		FOR i = 4  TO 17  DO
+			TaskList1[i].enabled=FALSE
+		ENDFOR
+		-- Enabling extra task for R3
+		FOR i = 9 TO 17 DO
+			TaskList3[i].enabled=TRUE
+		ENDFOR
+		
+		--******************************************
+		
+			-- End of profile
+	IF ((X_dir=1) AND (Stop1<>0))  THEN		
+			-- End  of profile R1
+		Set_IReg(290,Get_IReg(290)+1)
+		-- Disabling task for R3
+		FOR i = 19  TO 28  DO
+			TaskList3[i].enabled=FALSE
+		ENDFOR
+		-- Enabling extra task for R1
+		FOR i = 24 TO 28 DO
+			TaskList1[i].enabled=TRUE
+		ENDFOR
+	ENDIF
+	
+
+	IF ((X_dir=-1) AND (Stop1<>0))  THEN		
+			-- End  of profile R3
+		swap_robot=TRUE
+		Set_IReg(290,Get_IReg(290)+3)
+		-- Disabling task for R1
+		FOR i = 19  TO 28  DO
+			TaskList1[i].enabled=FALSE
+		ENDFOR
+		-- Enabling extra task for R3
+		FOR i = 24 TO 28 DO
+			TaskList3[i].enabled=TRUE
+		ENDFOR
+		
+		-- Temp
+		IF Get_IReg(290)=3 THEN 
+			TaskList1[18].enabled=FALSE
+		ENDIF
+	ENDIF
+	ENDIF
+		
+ENDIF
+	
+
+	
+	--****************** INIT POSITION **************************
+	-- set flag for X gantry move
+	IF ((PDx>X_limit*2) AND (XY_dir=2)) THEN
+		X_flag=1
+	ENDIF
+	
+	set_RReg(80,ang)
+	robot=0
+	
+	dist=0 -- to avoid uni
+	Set_IReg(70,10)
+		
+	-- Gets start pos of X gantry
+	Point2=CURPOS(0,0,2) -- user position
+	Jpoint2 = CURJPOS(1,0,2) -- funny position
+	CNV_JPOS_REL( jpoint2, fjntArr, STATUS)
+	
+	-- Offset  Robots X offset
+	X_off=0
+	
+	-- in order to get better room for sensing and welding
+	IF XY_dir = 1 THEN 
+		X_off=50*X_dir
+		--2017-08-28: 100 mm is too much
+	ENDIF
+
+	
+	IF XY_dir=2 THEN
+		IF PDX > X_limit THEN
+			X_diff =PDX-X_limit
+			X_off=X_diff/2
+			IF X_off>X_limit THEN
+				X_off = X_limit
+			ENDIF
+		ENDIF
+	ENDIF
+	
+	-- X offset for Arm up situations
+	--IF ((Get_IReg(67)=1) AND (XY_dir = 1)) THEN
+		--X_off = 125 * X_dir
+	--else 
+		--X_off=X_off*X_dir
+	--ENDIF
+	
+	Set_RReg(65,X_off)
+	
+	 --set start POS FOR X gantry
+	 --- temp
+	 --X_gantry=get_Rreg(66)
+	fjntArr[1]=fjntArr[1]/point2.x*(X_start+(X_off))
+		--
+	CNV_REL_JPOS(fjntArr,Jpoint2, STATUS)
+	SET_JPOS_REG(9,Jpoint2, STATUS,2)
+	--PAUSE
+	
+	
+	point9.x = X_start --???
+	
+	-- Setting Robots Y position for X dir
+	Point1=CURPOS(0,0,1)
+	Point3=CURPOS(0,0,3)
+	
+	Point1.y=Point1.y-(Point1.ext1-Y_start)
+	Point1.ext1=Y_start
+
+	Point3.y=Point3.y-(Point3.ext1-Y_start)
+	Point3.ext1=Y_start
+	
+	SE =Get_IReg(95) --start or end
+	IF XY_dir =1 THEN
+		ExtOffset =150
+	
+		-- use bigger distance for  high profiles
+		ProHei = profile[JobNo].Top1 -- getting profile Heith
+		IF ((ProHei>350)) THEN
+			ExtOffset=500-- bigger distance
+			Set_Rreg(272,extoffset*(-1)) -- fold offset
+			Set_Rreg(273,extoffset)-- fold offset
+			
+		ENDIF
+		
+		Point1.y=Point1.y-ExtOffset 
+		Point3.y=Point3.y+ExtOffset 
+		Point1.ext1=Point1.ext1-ExtOffset 
+		Point3.ext1=Point3.ext1+ExtOffset 
+	else
+		-- if Y-profile
+		ExtOffset =150
+		-- use bigger distance for  small profiles
+		
+		--IF ((Pleng<500)) THEN
+			-- longer distance
+				IF (((stop1 <> 0) AND (Stop2=0)) OR ((stop2 <> 0) AND (Stop1=0)))THEN
+					--ExtOffset=400-- bigger distance
+					--Set_Rreg(272,extoffset*Y_dir) -- fold offset
+					--Set_Rreg(273,extoffset*Y_dir)-- fold offset
+				ENDIF			
+	--	ENDIF
+		
+		Point1.y=Point1.y-ExtOffset *SE*Y_dir
+		Point3.y=Point3.y-ExtOffset *SE*Y_dir
+		Point3.ext1=Point3.ext1-ExtOffset *SE*Y_dir	
+		Point1.ext1=Point1.ext1-ExtOffset *SE*Y_dir	
+		
+	ENDIF
+	
+	SET_EPOS_REG(9,Point1, STATUS,1)
+	--SET_POS_REG(9,Point9, STATUS,2)
+	SET_EPOS_REG(9,Point3, STATUS,3)
+	
+	
+	DELAY 20
+	
+--******************************************************	
+	
+	-- registers for R3 profile sens
+	SE =-1
+	set_Ireg(95,SE)
+	-- TEMP
+	
+	--act_pos(8,2) --gets gantry pos
+	mp[8].x=(X_start+(X_off))
+	
+	--- X most be relative to gantry X!!!!
+	
+	IF XY_dir = 1 THEN -- X direction
+		IF  SE = -1 THEN --  STart
+			ProE=X_start-mp[8].x
+			ProS=Y_start
+		else 
+			ProE=X_end-mp[8].x--- End
+			ProS=Y_end
+		ENDIF
+	ENDIF
+	
+	IF XY_dir = 2 THEN -- Y direction
+		IF  SE = -1 THEN --  STart
+			ProE=Y_start
+			ProS=X_start-mp[8].x
+		else 
+			ProE=Y_end -- End
+			ProS=X_end-mp[8].x
+		ENDIF
+	ENDIF
+-- Sensing directions
+IF XY_dir = 1 THEN -- profile X direction
+	ProX=ProE
+	ProY=ProS
+else
+	ProX=ProS
+	ProY=ProE
+ENDIF
+	
+	--Set_RReg(272,ProX)
+	--Set_RReg(273,ProY)	
+
+
+		GOTO endlabel
+
+ENDIF
+
+-- ***********************  Start welding R1 *********************
+
+IF KL_step= 20 THEN
+	Set_IReg(70,20)
+	
+	-- if end_type 5 or T-Bar slope
+	
+	GOTO endlabel
+ENDIF
+
+-- ***********************  Start welding R1 *********************
+
+IF KL_step= 21 THEN
+	Set_IReg(70,21)
+	
+	GOTO endlabel
+ENDIF
+-- ***********************  Start welding R3 *********************
+
+IF KL_step= 30 THEN
+	Set_IReg(70,30)
+	dist=Robot_dis-20
+	--dist=10-- rafa temp
+	
+	def_PR(11,3,dist,1,0,0)
+	Def_PR(12,3,Robot_dis+75,1,0,0)
+	IF Get_IReg(67) = 1 THEN
+		Def_PR(12,3,Robot_dis+25,1,0,0)
+	ENDIF
+	Def_PR(13,3,Robot_dis+1,0,0,1)
+
+	GOTO endlabel
+ENDIF
+
+-- ***********************  Angle up R3 *********************
+
+IF KL_step= 31 THEN
+	Set_IReg(70,31)
+	dist=50
+		
+		IF end_type = 5 THEN
+			dist=10
+		ENDIF
+	--dist=10-- rafa temp
+	
+	def_PR(11,3,dist,1,0,1)
+	Def_PR(12,3,dist+20,1,0,1)
+
+	GOTO endlabel
+ENDIF
+
+
+-- ***********************  Sync Welding ********************
+
+IF KL_step=40 THEN -- Welding
+	
+	Set_IReg(70,40)
+	-- R3 Jumping: add distance between robots
+			realtemp3=0
+			IF ((robot=3) AND (Cross_num <> 0) AND (Cross_cnt <= Cross_num)) THEN 
+				act_pos(1,1)
+				act_pos(3,3)
+				IF XY_dir = 1 THEN -- 
+					 realtemp3=ABS(mp[1].x-mp[3].x)
+				else
+					 realtemp3=ABS(mp[1].y-mp[3].y)
+				ENDIF	
+			ENDIF
+	
+	IF XY_dir = 1 THEN
+		act_pos(1,1)-- use robots internal X
+		act_pos(2,2)-- use gantrys Global X
+		
+		--Checking if we moved too far
+		--IF x_dir=1 THEN 
+			--IF end_point<mp[2].x+mp[1].x THEN 
+				--kl_step=999
+				--GOTO endlabel
+			--ENDIF
+		--else
+			---- x_dir = -1
+			--IF end_point>mp[2].x+mp[1].x THEN 
+				--kl_step=999
+				--GOTO endlabel
+			--ENDIF
+		--ENDIF
+		
+		dist=ABS(End_point-mp[2].x-mp[1].x)-- stroke in X
+		dist = dist + realtemp3			
+		def_PR(11,1,dist,0,1,0)
+		
+		IF weld_step=1 THEN -- step welding
+			IF ((dist > ON_dis))THEN 
+				def_PR(11,3,on_dis,0,1,0)
+			else
+				Done = TRUE
+			ENDIF
+		ENDIF
+			-- correct  y pos of robots
+			--act_pos(1,1)-- use robots internal X
+			--dist = mp[1].x*(-1)
+			--def_PR(14,1,dist,1,0,1)
+	ENDIF
+	
+	
+	IF XY_dir = 2 THEN
+		act_pos(1,1)
+		
+		--Checking if we moved too far
+		IF y_dir=1 THEN 
+			IF end_point<mp[1].y THEN 
+				kl_step=999
+				GOTO endlabel
+			ENDIF
+		else
+			-- x_dir = -1
+			IF end_point>mp[1].y THEN 
+				kl_step=999
+				GOTO endlabel
+			ENDIF
+		ENDIF
+		dist=ABS(End_point-mp[1].y)-- stroke in Y
+		dist = dist + realtemp3
+		def_PR(11,2,dist,1,0,1)
+		
+		IF weld_step=1 THEN -- step welding
+			IF ((dist > ON_dis))THEN -- ikke helt rigtig. dist er ikke delta afstand. men y afstand
+				def_PR(11,3,on_dis,1,0,1)
+			else
+				Done = TRUE
+			ENDIF
+		ENDIF
+		
+	ENDIF
+		
+	GOTO endlabel
+ENDIF
+
+-- ***********************  Sync Welding long start for chain welding ********************
+
+IF KL_step=41 THEN -- Welding
+	
+	Set_IReg(70,40)
+	
+	IF XY_dir = 1 THEN
+		act_pos(1,1)-- use robots internal X
+		act_pos(2,2)-- use gantrys Global X
+		
+		dist=ProHei*1.75-ABS((ProX)-mp[1].x)-- stroke in X from Start point of profile
+		def_PR(11,1,dist,0,1,0)
+		
+	ENDIF
+	
+	IF XY_dir = 2 THEN
+		act_pos(1,1)
+		dist=ProHei*1.75-ABS(ProY-mp[1].y)-- stroke in Y
+		def_PR(11,2,dist,1,0,1)
+	ENDIF
+		
+	GOTO endlabel
+ENDIF
+
+
+
+-- ***********************  Sync Motion ********************
+IF KL_step=45 THEN -- No welding
+	
+	Set_IReg(70,45)
+	IF XY_dir = 1 THEN
+		
+		act_pos(1,1)-- use robots internal X
+		act_pos(2,2)-- use gantrys Global X
+		
+		--dist=ABS(End_point-mp[2].x-mp[1].x)-- stroke in X, do we use this?
+		
+		
+		IF weld_step=1 THEN -- step welding
+			dist=ABS(X_end-mp[2].x-mp[1].x)-ProHei*1.75 -- stroke in X weld longer at end
+			def_PR(11,1,dist,0,1,0)
+			
+			IF ((dist > OFF_dis))THEN 
+				def_PR(11,1,OFF_dis,0,1,0)
+			else
+				Done = TRUE
+			ENDIF
+		ENDIF
+	ENDIF
+	
+	IF XY_dir = 2 THEN
+		act_pos(2,1)
+		--dist=ABS(End_point-mp[2].y)-- stroke in Y
+		
+		
+		IF weld_step=1 THEN -- step welding
+			dist=ABS(Y_end-mp[2].y)-ProHei*1.75 -- stroke in Y-- weld longer at end
+			def_PR(11,2,dist,1,0,1)
+			IF ((dist > OFF_dis))THEN 
+				def_PR(11,2,OFF_dis,1,0,1)
+			else
+				Done = TRUE
+			ENDIF
+		ENDIF
+	ENDIF
+	
+	GOTO endlabel
+ENDIF
+
+
+
+-- ***********************  Single welding motions + Jumping  *********************
+
+IF KL_step=51 THEN 
+			
+			--dist=ABS(2*Cross_dis) -- distance to next start point
+			
+			--checking if distance to next cross is below 800, then double jump
+			--Loop through all cross, until distance between 2 crosses are <800
+			i=cross_cnt 
+			 Booltemp=FALSE
+			
+			IF cross_cnt<cross_num THEN  -- if not last  cross
+				REPEAT
+			
+					IF ABS(cross[i].xy-cross[i+1].xy) < cross_dis*2 THEN
+						cross_cnt=cross_cnt+1--ad up cross counter
+						i=i+1
+					else 
+						booltemp=TRUE
+					ENDIF
+					
+					IF i=cross_num THEN -- stop if  no more crosses
+						booltemp=TRUE
+						
+					ENDIF
+					
+				UNTIL (Booltemp=TRUE)
+			ENDIF
+			
+			-- if last piece of profile
+			IF cross_cnt=cross_num THEN 
+				-- getting distance. endpoint=current pos
+				
+				--finding end of profile
+				IF XY_dir = 1 THEN 
+					realtemp=X_end-- ikke helt rigtig. tager i højde for profilets vinkel
+				else
+					realtemp=Y_end-- ikke helt rigtig. tager i højde for profilets vinkel
+				ENDIF
+				
+				--checking length of last piece
+				realtemp2=ABS(realtemp-cross[cross_cnt].xy)
+				
+				IF realtemp2 > (cross_dis+start_dis+50) THEN -- if enough space
+					dist=ABS(end_point-cross[cross_cnt].xy)+Cross_dis -- see step 35
+				else 
+				--less than 400 mm, no weld after cross. move to middle of last piece
+				--dist=ABS(realtemp-end_point)/2
+				dist=ABS(end_point-cross[cross_cnt].xy)+(realtemp2/2)
+				ENDIF
+				
+				IF cross[cross_cnt].rat=1 THEN -- if rathole
+					dist=ABS(end_point-cross[cross_cnt].xy)-100
+				ENDIF
+			else
+				-- if not last cross
+				--endpoint is robots stop point before cross
+				dist4=ABS(cross[cross_cnt].xy-cross[cross_cnt+1].xy)
+				IF dist4<900 THEN 
+					dist5=300 -- use less
+				else
+					dist5=cross_dis -- normal 400
+				ENDIF		
+				
+				dist=ABS(end_point-cross[cross_cnt].xy)+dist5-- see step 35
+			ENDIF
+			
+			IF XY_dir=1 THEN 
+				def_PR(13,3,dist-50,0,1,0) -- gantry point after jump
+				def_PR(11,3,50,1,0,1) -- Start point for jumping robot
+				def_PR(12,3,150,1,0,1) -- sync point
+				
+				IF get_ireg(84)=4 THEN -- if both robots are jumping
+						def_PR(13,3,dist,0,1,0) -- gantry point after jump
+						def_PR(11,3,1,1,0,1) -- Start point for jumping robot
+				ENDIF
+					
+			else 
+				def_PR(13,3,dist-100,1,0,1) -- gantry point after jump
+				def_PR(11,3,dist+100,1,0,1) -- Start point for jumping robot
+				def_PR(12,3,dist+200,1,0,1) -- sync point
+			ENDIF
+			
+		
+		--TP steps
+		Set_IReg(70,51)
+		cross_cnt=cross_cnt+1
+ENDIF
+
+-- ***********************  R3 catching up *********************
+
+IF KL_step=52 THEN -- Single motion of a robot 
+		Set_IReg(70,52)	
+				
+				act_pos(1,1)
+				act_pos(3,3)
+				IF XY_dir = 1 THEN -- 
+					dist=ABS(mp[1].x-mp[3].x)
+				else
+					dist=ABS(mp[1].y-mp[3].y)
+				ENDIF		
+		
+			def_PR(11,3,dist,0,0,1)
+			def_PR(12,3,dist+2,0,0,1)
+
+		
+ENDIF
+-- ***********************  R1 moves ahead* *****************
+
+IF KL_step=53 THEN -- 
+		Set_IReg(70,53)
+
+			dist=Robot_dis
+			def_PR(11,3,dist,1,0,0) -- Start point
+			dist = dist + 20
+			def_PR(12,3,dist,1,0,0) -- sync point
+		
+		--TP steps
+
+ENDIF
+
+-- ***********************  R1 moves ahead, no welding in step welding****************
+
+IF KL_step=54 THEN -- 
+		Set_IReg(70,54)
+
+			dist=get_IReg(89)
+			def_PR(11,3,dist,1,0,0) -- Start point
+
+ENDIF
+
+-- *********************** Rat holes *****************
+
+IF KL_step=55 THEN -- 
+		Set_IReg(70,55)
+
+			--dist=200
+			--
+			--IF XY_dir = 1 THEN
+				--def_PR(11,3,dist,0,1,0)
+			--else
+				--def_PR(11,3,dist,1,0,1) -- point after rat hole
+			--ENDIF 
+			
+		cross_cnt=cross_cnt+1
+		
+ENDIF
+
+
+-- ***********************  End welding *********************
+endlabel::
+
+IF KL_step= 999 THEN
+	Set_IReg(70,999)
+	Set_IReg(165,0) -- move gantry reset
+	act_pos(1,1)
+	act_pos(2,2)
+	act_pos(3,3)
+	
+	
+	IF XY_dir = 1 THEN
+		
+		-- Weld back over lap
+		dist=-10
+		Def_PR(15,1,dist,1,0,1)
+		
+		-- if step welding: move with gantry at end
+		IF weld_step=1 THEN 
+			dist=50
+			def_PR(11,1,dist,0,1,0)--gantry
+			Set_IReg(165,1)
+			dist=-60
+			Def_PR(15,1,dist,1,0,1)
+		ENDIF
+		
+		--Move gantry at end if no side profile
+		IF (Stop2=0) THEN
+			dist=50
+			def_PR(11,1,dist,0,1,0)--gantry
+			Set_IReg(165,1)
+			dist=-60
+			Def_PR(15,1,dist,1,0,1)
+		ENDIF
+		
+		
+	ENDIF
+	
+	IF XY_dir = 2 THEN
+		
+		-- Weld back over lap
+		dist=-10
+		Def_PR(15,2,dist,1,0,1)
+		
+	ENDIF
+		dist=2
+		Def_PR(12,3,dist,1,0,1)
+	
+ENDIF
+
+
+
+-- checking for crosses
+IF ((Done = TRUE) OR (weld_step=0)) THEN
+	IF ((Cross_num <> 0) AND (Cross_cnt <= Cross_num) AND ((KL_step=40) OR (KL_step=45))) THEN
+		Kl_stepN = 51
+	ENDIF
+ENDIF
+
+set_IReg(63,cross_cnt)
+set_IReg(69,KL_step)
+set_IReg(71,KL_stepN)
+
+
+set_IReg(74,weld_off)
+DOUT[110]=OFF
+
+END WeldPerf
+

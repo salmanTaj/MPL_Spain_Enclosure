@@ -1,0 +1,467 @@
+PROGRAM WeldCtrl
+	
+	%COMMENT = 'Vers. 1.5-rafa'
+	%NOLOCKGROUP
+	%NOPAUSESHFT
+	%NOPAUSE = ERROR + TPENABLE + COMMAND
+	
+TYPE
+%INCLUDE Types
+
+
+VAR
+%INCLUDE Variables
+
+--counters
+
+
+con_Cnt, long_cnt, short_Cnt, Fact_cnt 		FROM WeldCtrl: INTEGER
+
+-- Long Long_Arrayay
+Long_avg, Long_sum, L_avg_fix		FROM WeldCtrl: REAL
+Long_Array					FROM WeldCtrl: ARRAY[500] OF REAL
+long_full 						FROM WeldCtrl: BOOLEAN
+Long_delay, Long_max			FROM WeldCtrl: INTEGER 
+
+-- Short Long_Arrayay
+Short_avg, Short_sum			FROM WeldCtrl: REAL
+Short_Array					FROM WeldCtrl: ARRAY[50] OF REAL
+short_full 						FROM WeldCtrl: BOOLEAN
+Short_max					FROM WeldCtrl: INTEGER
+
+
+TempInt, cnt_tmp			FROM WeldCtrl: INTEGER 
+
+Step_cnt, Step_dir				FROM WeldCtrl: INTEGER
+resetdelay				FROM WeldCtrl: INTEGER
+limit					FROM WeldCtrl: INTEGER
+
+
+-- Misc
+Hspike, Lspike	FROM WeldCtrl: BOOLEAN
+Hcnt, Lcnt 			FROM WeldCtrl: INTEGER
+
+ArcDetPort, FbkAmpPort, Machine			FROM WeldCtrl: INTEGER 
+GET						FROM WeldCtrl: INTEGER 			
+Comp_start					FROM WeldCtrl: INTEGER 
+
+Cur_Diff,Factor_Act, Factor_store			FROM WeldCtrl: REAL
+SpeedArr    					FROM WeldCtrl :ARRAY[10] OF REAL
+FreqArr						FROM WeldCtrl :ARRAY[10] OF REAL
+AmplArr						FROM WeldCtrl :ARRAY[10] OF REAL
+CurArr						FROM WeldCtrl :ARRAY[10] OF REAL
+PosArr 						 FROM WeldCtrl :XYZWPREXT 
+
+RunLoop						FROM WeldCtrl: BOOLEAN
+update, log					FROM WeldCtrl: BOOLEAN
+AnVal						FROM WeldCtrl: REAL
+
+edge_type					FROM WeldCtrl: STRING[10]
+
+FindDiff						FROM WeldCtrl: REAL
+DelayT						FROM  WeldCtrl: REAL
+diff						FROM WeldCtrl: REAL
+abs_diff						FROM WeldCtrl: REAL
+Factor_set				FROM WeldCtrl: REAL
+			
+-- Values from system variables
+Org_OTF_spd					FROM WeldCtrl: REAL
+Org_OTF_Freq, OTF_Freq, Chg_Freq, Set_freq		FROM WeldCtrl: REAL
+Org_OTF_DwR, OTF_DwR, Chg_DwR, Set_DwR		FROM WeldCtrl: REAL
+Org_OTF_DwL, OTF_DwL, Chg_DwL, Set_DwL		FROM WeldCtrl: REAL
+Org_OTF_AMPS													FROM WeldCtrl: REAL
+	
+ROUTINE LoopCtrl FROM WeldCtrl
+
+
+-- ******************************************************************** 
+ROUTINE LoopCtrl
+-- ********************************************************************
+---- this routine has 2 Long_Arrayays
+---- "Short_array" that holds the last "Short_max" meassures and are in front of long array
+---- "Long_Array" holds the previous meassures from "Short_max" to "Long_max"
+
+--- first both Arrays are filled up
+--- then the loop starts and Long_Arrays are overwritten
+--- sum and average are found
+--- average between the 2 Arrays are compared
+
+BEGIN
+
+IF (DIN[ArcDetPort]= ON) THEN
+		--PAUSE
+	IF (con_cnt = 0) THEN
+		-- Getting OTF system variables Original
+		GET_VAR(TempINT,'*SYSTEM*','$MCR_GRP[1].$OTF_ORG_SPD', Org_OTF_SPD,Stat)	
+		GET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$ORG_WVSCH.$FREQUENCY', Org_OTF_Freq,Stat)
+		GET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$ORG_WVSCH.$DWELL_RIGHT', Org_OTF_DwR,Stat)
+		GET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$ORG_WVSCH.$DWELL_LEFT', Org_OTF_DwL,Stat)
+	ENDIF
+	
+	-- adds up counters	
+	con_cnt = con_cnt +1 -- continues counter
+	Fact_cnt = Fact_cnt +1 -- factor counter
+	Long_cnt = Long_cnt +1 -- Long_Arrayay counter
+	Short_cnt = Short_cnt + 1 -- check Long_Arrayay counter
+		
+		
+	------------- reset counters
+		
+	IF con_cnt < Short_max+1 THEN -- Long  counter does not start before Short_Array is filled up
+		Long_cnt = 0
+	ENDIF
+	
+	IF con_cnt < long_delay  THEN -- reset long counter if below delay
+		Long_cnt = 0
+	ENDIF
+					
+	IF Long_cnt > Long_max  THEN	-- Long_Arrayay counter reset if max
+		Long_cnt = 1
+		long_full = TRUE
+	ENDIF
+	
+	IF Short_cnt > Short_max THEN -- 	Short counter reset if max
+		Short_cnt = 1
+		short_full = TRUE
+	ENDIF
+		
+	-------------- retract old values from arrays before new are added
+	
+	IF long_full = TRUE THEN -- only if Long_Array is filled up
+		Long_sum = Long_sum - Long_Array[Long_cnt]
+	ENDIF
+	
+	IF short_full = TRUE THEN 	-- only if Short_array is filled up
+		Short_sum = Short_sum - Short_Array[Short_cnt]
+	ENDIF
+		
+		
+	-------------- get value from welding machine
+	--AnVal = (AIN[FbkAmpPort]/10)
+	AnVal = (GIN[FbkAmpPort])
+	--PAUSE
+		
+		
+	--------------- write value to Long_Array
+	IF (long_cnt >= 1)  THEN -- only when long starts to count
+		Long_Array[Long_cnt] = Short_Array[Short_cnt] -- writes old Short_Long_Arrayay value to Long_Array
+		Long_sum = (Long_sum + Long_Array[Long_cnt])
+	ENDIF
+		
+	-------------- write value to Short_Array
+	Short_Array[Short_cnt] = anval
+	Short_sum = Short_sum + Short_Array[Short_cnt]
+		
+	-------------- average 
+	Long_avg = Long_sum / Long_max
+	Short_avg = Short_sum/Short_max
+		
+	IF (long_full = FALSE ) AND (long_cnt >=1) THEN -- average if long Array  is not filled up yet
+		Long_avg = Long_sum / (long_cnt)
+	ENDIF
+		
+	-- ////////////////////////////////////////////////   DATA Handling    ///////////////////////////////////////////////////
+		
+	IF (con_cnt > Comp_start+long_delay) THEN  -- only checks if minimum measures are done
+	
+					
+		-- *********************************   Gap control  *************************	
+		IF GET = 1 THEN	
+					
+			
+			Cur_Diff = anval/long_avg
+			
+			IF (Cur_Diff < 0.91) THEN -- Low spike trigger
+				Lspike = TRUE
+			ENDIF
+			
+			IF (Cur_Diff > 1.09) THEN -- High spike trigger
+				Hspike = TRUE
+			ENDIF
+			
+			IF Lspike = TRUE THEN --Low spike counter
+				Lcnt = Lcnt +1
+			ENDIF
+			
+			IF Hspike = TRUE THEN -- High spike counter
+				Hcnt = Hcnt +1
+			ENDIF
+					
+			IF Lcnt > 50 THEN -- low reset
+				Lspike = FALSE
+				Lcnt = 0
+				
+			ENDIF
+			
+			IF Hcnt > 50 THEN -- High reset
+				Hspike = FALSE
+				Hcnt = 0
+				
+			ENDIF
+									
+			IF (Lspike = TRUE) AND (Hspike = TRUE) AND (Fact_cnt > 20) THEN -- only logs onces per spike set
+				Step_dir = 1
+				update = TRUE
+				Lspike = FALSE
+				Hspike = FALSE
+				Lcnt = 0
+				Hcnt = 0
+			ENDIF	
+			
+			IF  (cur_diff < 0.88) OR (cur_diff>1.12) AND ((log = TRUE) AND  (Fact_cnt > 20)) THEN -- only logs onces per spike set
+				Step_dir = 1
+				update = TRUE
+				Lspike = FALSE
+				Hspike = FALSE
+				Lcnt = 0
+				Hcnt = 0
+			ENDIF	
+			
+			IF (cur_diff > 0.89) AND (cur_diff < 1.11) THEN -- enables setting of factor_min 
+				log = TRUE
+			ENDIF	
+									
+			IF (Fact_cnt > resetdelay) AND (Step_cnt > 1) AND  (Step_cnt < 3)  THEN  -- goes back in steps
+				Step_dir = -1
+				update = TRUE
+				Fact_cnt = 0
+			ENDIF
+	
+			
+			
+---****************************    Updates parameters  *******************************			
+			IF Update = TRUE THEN	
+				IF fact_cnt < 100 THEN 
+					GOTO jump
+				ENDIF
+				
+				-- *** if step goes up ****
+				IF step_dir = 1 THEN
+					Step_cnt = Step_cnt +1
+				ENDIF
+				
+				IF (Step_cnt > 5) THEN -- limit for factor
+				Step_cnt = 5
+				--Update = FALSE -- ser ud til at gøre noget forkert
+				ENDIF
+								
+				--SPEED 
+				SET_VAR(TempINT,'*SYSTEM*','$MCR_GRP[1].$OTF_SPEED', SpeedArr[Step_cnt]*10/60, Stat)
+				SET_VAR(TempINT,'*SYSTEM*','$MCR_GRP[1].$OTF_SPD_CHG', 1 ,Stat)
+				
+							
+								
+				-- Frequence
+				-- compensate for speed changes
+				GET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$OTF_WVSCH.$FREQUENCY', OTF_Freq,Stat)
+				
+				Factor_set = SpeedArr[Step_cnt]/SpeedArr[Step_cnt-1]
+				
+				Set_freq = OTF_freq*1/Factor_set
+						
+				Chg_Freq = set_freq - OTF_freq
+				
+				SET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$CHG_FREQ', Chg_Freq,Stat)
+				
+				IF 	AmplArr[Step_cnt] <> 0 THEN
+						SET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$INC_FREQ', FreqArr[Step_cnt] ,Stat)
+											
+					IF Step_dir = 1 THEN
+						SET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$CHG_FREQ', 1.0 ,Stat)
+					ELSE 	
+						-- If gap goes down:
+						SET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$CHG_FREQ', -1.0 ,Stat)
+					ENDIF
+				ENDIF
+							
+						
+					-- Amplitude
+				SET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$INC_AMPL', AmplArr[Step_cnt] ,Stat)
+			
+				IF 	AmplArr[Step_cnt] <> 0 THEN
+					IF  Step_dir = 1 THEN
+						SET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$CHG_AMPL', 1.0 ,Stat)
+					ELSE 	
+						-- If gap goes down:
+						SET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$CHG_AMPL', -1.0 ,Stat)
+					ENDIF
+				ENDIF
+				
+				-- Welding Current
+				SET_VAR(TempINT,'*SYSTEM*','$AWEOTF[1].$INC_WFS', CurArr[Step_cnt] ,Stat)
+							
+				IF Step_dir = 1 THEN
+					SET_VAR(TempINT,'*SYSTEM*','$AWEOTF[1].$CHG_WFS', 1,Stat)
+					
+				ELSE 
+					-- If gap goes down:
+					SET_VAR(TempINT,'*SYSTEM*','$AWEOTF[1].$CHG_WFS', -1 ,Stat)
+				ENDIF
+				
+					-- *** if step goes down ****
+				IF step_dir = -1 THEN
+					Step_cnt = Step_cnt -1
+				ENDIF
+				
+				Fact_cnt = 0
+				
+				Jump::		
+				Update = FALSE
+				Step_dir = 0
+												
+			ENDIF
+		ENDIF
+	
+	
+	-- *********************************** END Detectioin  ******************************	
+		IF GET = 2 THEN
+			IF (long_avg <> 0) THEN
+				Factor_act = anval/long_avg
+				
+				IF Factor_Act < 0.93 THEN 
+					SET_INT_REG(139,1,StatIn)
+					RunLoop = FALSE
+				ENDIF
+			ENDIF
+		ENDIF	
+		
+	-- *********************************** Tack Detection ******************************	
+		IF GET = 2 THEN
+		ENDIF	
+					
+	ENDIF
+
+EndIF
+
+		-- //////////////////////  End loop /////////////////////////
+	 	IF ((con_Cnt > 10) AND (DIN[ArcDetPort]= OFF))  THEN
+	 	
+			--con_Cnt = 0
+	  			
+	  		RunLoop = FALSE
+			
+		ENDIF
+	
+END LoopCtrl
+
+-- ********************************************************************
+-- main program
+-- ********************************************************************
+BEGIN
+
+---- sets all counters to 0 ----
+	con_cnt = 0
+	Long_cnt = 0
+	Short_cnt = 0
+	Lcnt = 0
+	Hcnt = 0
+	
+	Long_sum = 0
+	Short_sum = 0
+	
+	--Ana_Result = 0
+	Factor_act = 1
+	Factor_Store = 1
+	Step_cnt = 1
+	Step_dir=0
+	Fact_cnt = 100 -- constant until first change
+	
+	long_full = FALSE
+	Short_full = FALSE
+	update = FALSE
+	Lspike = FALSE
+	Hspike = FALSE
+	log = TRUE
+		
+	SET_INT_REG(139,0,StatIn)
+	
+	--SET_VAR(TempINT,'*SYSTEM*','$AWEOTF[1].$CHG_WFS', -10 ,Stat)
+	--ABORT
+
+	-- gets port numbers for arc detect, Volt in, amp in, volt out, amp out
+	
+	--sets machine
+	GET_VAR(TempINT,'*SYSTEM*','$AWEPRR[1].$ARC_DETECT.$PORT_NUM',ArcDetPort,Stat)
+	GET_VAR(TempINT,'*SYSTEM*','$AWEPRR[1].$CURRENT_FBK.$PORT_NUM',FbkAmpPort,Stat)
+	FbkAmpPort=12
+	
+	SELECT ArcDetPort OF
+		CASE (10):
+			Machine = 1-- Kemppi
+		CASE (281):
+			Machine = 2 -- Migatronic
+		CASE (396):
+			Machine = 3 -- Kemppi A7
+	else: 
+		GOTO error2
+	ENDSELECT
+
+-- Gets control type: GET, Gap/End/Tack
+	GET_REG(138,Bool_Tmp,GET, Real_Tmp,Stat)
+	GET_REG(140,Bool_Tmp,resetdelay, Real_Tmp,Stat)
+	GET_REG(141,Bool_Tmp,limit, Real_Tmp,Stat)			
+
+SELECT  GET OF -- sets size of arrays and delays depending of function
+	CASE (1): -- GAP detection
+		Comp_start = 50 -- min before compare
+		Long_delay = 100 -- delay before start of long array
+		Long_max = 150 -- max Long_Arrayay meassures	
+		Short_max = 5 -- max check meassures
+	CASE(2): -- END detection
+		Comp_start = 50 -- min before compare
+		Long_delay = 100 -- delay before start of long array
+		Long_max = 150 -- max Long_Arrayay meassures	
+		Short_max = 5
+	
+	CASE(3): -- Tack detection	
+ENDSELECT
+	
+-- Setting variables
+	SET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$OTF_ENABLE', TRUE,Stat)
+	SET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$GET_AMP', FALSE,Stat)
+	SET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$RAMP', FALSE,Stat)
+
+
+-- Get arrays: 
+cnt_tmp = 1
+
+WHILE cnt_tmp <= 5 DO
+	PosArr = GET_POS_REG(100+cnt_tmp,stat)
+	SpeedArr[cnt_tmp] = PosArr.x
+	FreqArr[cnt_tmp] = PosArr.y
+	AmplArr[cnt_tmp] = PosArr.z
+	CurArr[cnt_tmp] = PosArr.w
+	
+	cnt_tmp = cnt_tmp +1
+ENDWHILE
+
+-- Runs Loop. only if GET register is 1-3
+	RunLoop = TRUE
+
+	WHILE RunLoop = TRUE AND ((GET=1) OR (Get=2) OR (GET=3)) DO 
+		DELAY 16
+		LoopCtrl
+	ENDWHILE  		
+
+
+  
+DELAY 200
+GOTO last
+
+
+error2::
+-- stops robot if file error and displays error
+--DOUT[86]=FALSE
+DELAY 200
+--DOUT[86]=TRUE
+WRITE TPERROR (CR,'                                                                                             ',CR)
+WRITE  TPERROR('Welding machine setup problem')
+
+ABORT
+
+Last::
+
+
+END WeldCtrl
+
+

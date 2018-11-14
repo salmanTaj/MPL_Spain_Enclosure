@@ -1,0 +1,401 @@
+PROGRAM CurChk
+-- 	Current check optimized for end detection on migatronic
+
+
+	
+	%COMMENT = 'Vers.test.tim'
+	%SYSTEM
+	%NOLOCKGROUP
+	%NOPAUSESHFT
+	%NOBUSYLAMP
+	%NOPAUSE = ERROR + TPENABLE + COMMAND
+	%NOABORT = ERROR 
+
+VAR
+	Vec1   					FROM CurChk :VECTOR
+	LoopCnt 				FROM CurChk :INTEGER
+	i						FROM CurChk :INTEGER
+	StrNr					FROM CurChk :INTEGER
+	WeldNr		IN CMOS	FROM CurChk :INTEGER
+	
+	filnavn : FILE
+	FileStr   FROM CurChk : STRING[20]
+	NumStr FROM CurChk : STRING[4]
+
+	RealVal	     FROM CurChk: REAL
+	IntVal          FROM CurChk: INTEGER
+	BoolVal	     FROM CurChk: BOOLEAN
+
+	-- fljo added
+	SensArr       	FROM CurChk:ARRAY[9] OF REAL
+	JPos_Test    	FROM CurChk:JOINTPOS              
+	CalcPos		FROM CurChk:XYZWPREXT
+	Vect1		FROM CurChk: VECTOR
+		
+	-- weld out signals
+	 SetVoltPort, SetAmpPort	FROM CurChk :INTEGER
+		
+	-- weld in signals
+	FbkVoltPort, FbkAmpPort, ArcDetPort	FROM curchk :INTEGER
+	
+	--Machine		FROM curchk :INTEGER
+	
+	SideStr			FROM CurChk :STRING[30]
+	TimeInt			FROM CurChk :INTEGER
+	TimeStr			FROM CurChk :STRING[20]
+	file_Done       	FROM CurChk :BOOLEAN
+	
+	TempInt, Stat		FROM CurChk :INTEGER
+	Weav_Amp_Act    	FROM CurChk :REAL
+	Weav_AmpAct2    	FROM CurChk :REAL
+	Weav_Amp_OFS    	FROM CurChk :REAL
+	Weav_Amp_Org    	FROM CurChk :REAL
+	OTF_Speed                FROM CurChk :REAL
+	OTF_Ospeed      		FROM CurChk :REAL
+	
+	Fine_volt    			FROM CurChk :REAL
+	
+	W_Speed    			FROM CurChk :REAL
+	Heat_Input 			FROM CurChk :REAL
+	WV_Amp_Act    		FROM CurChk :REAL
+	WV_Frq_Act    		FROM CurChk :REAL				-- actual weaving Frequency
+	statusf 				FROM Curchk: INTEGER
+	Bool 				FROM CurChk :BOOLEAN
+	STATUS 			FROM CurChk :INTEGER
+	Reall 				FROM CurChk :REAL
+	Int 					FROM CurChk :INTEGER
+	ErrorNo				FROM CurChk :INTEGER
+	ErrorReq 			FROM CurChk :BOOLEAN
+	
+Sum_Arct				FROM CurChk: REAL                       	--  Sum of diff in GIN[FbkArctPort] in last Cyc_Max cycle
+Max_Arct 		   		FROM CurChk: REAL                      	--  Max value of GIN[FbkArctPort]
+Min_Arct  	  			FROM CurChk: REAL                       	--  Min value of GIN[FbkArctPort]
+Dif_Arct	  		  		FROM CurChk: REAL                       	--  Max - min of GIN[FbkArctPort]
+Avg_Dif_Arct	  		FROM CurChk: REAL                       	--  Avg of Max - min of GIN[FbkArctPort]  in last Cyc_Max cycle
+Arct_Val  				FROM CurChk: REAL                            --  Value of GIN[FbkArctPort]
+Amp_Val  				FROM CurChk: REAL                            --  Value of GIN[FbkAmpPort]
+Dif_Arct_Arr				FROM CurChk: ARRAY[10] OF REAL	--  Last 10 value of Diff between max and min GIN[FbkArctPort]
+End_Full	 				FROM CurChk: BOOLEAN           	  	--  First cycle is finished
+Cyc_Full	 				FROM CurChk: BOOLEAN           	  	--  First Cyc_Max cycle is finished
+End_Found 				FROM CurChk: BOOLEAN           	  	--  End found
+End_Max				FROM CurChk: INTEGER             		--  Number of steps in loop
+Cyc_Max                           FROM CurChk: INTEGER             		--  Number of steps in cycle
+End_Start                   		FROM CurChk: INTEGER             		--  Number of steps before end detect begin
+Fbk_Amp_P		      	       FROM CurChk: INTEGER                	-- GIN number for [FbkArctPort]
+Fbk_Arct_P		              FROM CurChk: INTEGER                  	-- GIN number for [FbkArctPort]
+End_Cnt		 			FROM CurChk: INTEGER                  	-- Counter for END loop
+Cyc_Cnt		 			FROM CurChk: INTEGER                  	-- Counter for number of cycle
+Det_Coe	  			FROM CurChk: REAL 				 --  detect coefficie
+Coe                                    FROM CurChk: REAL 					  -- coefficient between Dif_Arct /  Avg_Dif_Arct
+	
+ROUTINE CurLog FROM CurChk 
+ROUTINE Set_RReg (Number : INTEGER; Value : REAL) FROM CurChk
+
+
+-- ***********************************************************************************************
+-- ROUTINE -->> Setting value of selected register
+-- ***********************************************************************************************
+-- 2015-02-13: tested and works.
+ROUTINE Set_RReg -- (Number : INTEGER) :REAL FROM FunktLib
+BEGIN
+                      SET_REAL_REG(Number, Value, STATUS)
+                      --DELAY 10
+                      IF (STATUS <> 0) THEN
+                                            ErrorNo = 933
+                                            ErrorReq = TRUE     
+                                            PAUSE   
+                      ENDIF  
+END Set_RReg
+
+---------------------------------------------------------------------------------------------
+ROUTINE CurLog
+--------------------------------------------------------------------------------------------- 
+
+BEGIN
+--MACHINE = 2
+	IF (DIN[ArcDetPort]= ON) THEN
+	
+	
+-- open file at startup	
+		IF LoopCnt = 0 THEN
+			--fine_volt = 20/1000*AOUT[SetVoltPort]-10 -- Fine volt settings -10 to +10
+			
+			OPEN FILE filNavn ('ap',FileStr)			
+			
+			WRITE filnavn ('Kemppi'::6::1,CR,CR) 					
+		ENDIF
+		LoopCnt = LoopCnt + 1
+
+ 	End_Cnt = End_Cnt + 1 -- adds up End_Arrayay counter		
+ 	
+ 	 -- cycle is finish
+ 	IF (End_Cnt > End_Max) THEN -- counter reset for each cycle
+		End_Cnt = 1
+		Max_Arct  = Arct_Val -- reset max value for each cycle
+		Min_Arct  = Arct_Val  -- reset min value for each cycle
+		Cyc_Cnt = Cyc_Cnt +1      -- adds up counter
+		
+		IF (Cyc_Cnt > Cyc_Max) THEN  -- counter reset for each Cyc_Max cycle
+  	       	Cyc_Cnt = 1
+			Cyc_Full = TRUE    
+		ENDIF
+		
+	    IF (Cyc_Full = TRUE) THEN 	-- only if Cyc_array is filled up
+		Sum_Arct = Sum_Arct - Dif_Arct_Arr[Cyc_Cnt] -------------- retract old values from arrays before new are added
+	    ENDIF
+	    
+	    Dif_Arct_Arr[Cyc_Cnt] = Dif_Arct   -------------- write value to Dif_Arct_Arr
+   	    Sum_Arct = Sum_Arct + Dif_Arct_Arr[Cyc_Cnt]
+           Avg_Dif_Arct = Sum_Arct/Cyc_Max
+
+           IF (Cyc_Full = FALSE ) AND (Cyc_Cnt >=1) THEN -- average if Dif_Arct_Arr Array  is not filled up yet
+		Avg_Dif_Arct = Sum_Arct / (Cyc_Cnt)
+           ENDIF
+           
+ 	ENDIF
+ 	 
+
+-------------- get value from welding machine
+	--Arct_Val = (GIN[FbkArctPort])
+	--Amp_Val = (GIN[FbkAmpPort])
+	Arct_Val  = (GIN[Fbk_Arct_P])
+	Amp_Val  = (GIN[Fbk_Amp_P])
+	
+	IF (Max_Arct  < Arct_Val) THEN 
+		 Max_Arct  = Arct_Val
+	 ENDIF		
+
+	IF (Min_Arct  > Arct_Val) THEN 
+		 Min_Arct = Arct_Val
+	 ENDIF		
+
+-------------- write value to End_Array
+       Dif_Arct = Max_Arct - Min_Arct
+       
+-- *********************************** END Detectioin  ******************************
+        IF ( Avg_Dif_Arct > 0) THEN
+    	 	IF ((Avg_Dif_Arct * Det_Coe) < Dif_Arct) THEN
+     			End_Found = TRUE
+     			Coe =  Dif_Arct / Avg_Dif_Arct
+     		ENDIF
+        ENDIF
+        
+        set_rreg(25,Coe)
+        
+-- getting weaving vector
+		GET_VAR(TempINT,'*SYSTEM*','$WVSTATE[1].$CUR_REL_VEC', Vec1,Stat)
+-- fljo added
+	SensArr[1] = $SCR_GRP[1].$MCH_ANG[1]
+	SensArr[2] = $SCR_GRP[1].$MCH_ANG[2]
+	SensArr[3] = $SCR_GRP[1].$MCH_ANG[3]
+	SensArr[4] = $SCR_GRP[1].$MCH_ANG[4]
+	SensArr[5] = $SCR_GRP[1].$MCH_ANG[5]
+	SensArr[6] = $SCR_GRP[1].$MCH_ANG[6]
+	SensArr[7] = 0
+	SensArr[8] = 0
+	SensArr[9] = 0
+	CNV_REL_JPOS(SensArr, JPos_Test, Stat) 	
+	CalcPos = JPos_Test
+	
+	
+	Vect1.x = CalcPos.x
+	Vect1.y = CalcPos.y
+	Vect1.z = CalcPos.z
+		
+		Weav_Amp_Act = SQRT((Vec1.X*Vec1.X)+(Vec1.Y*Vec1.Y)+(Vec1.Z*Vec1.Z))
+		
+		--Weav_AmpAct2 = Vect1.Z
+		
+		GET_REG(499,Bool,Int,Reall,STATUS)
+		
+		IF Int = 1 THEN -- vertical 
+			Weav_AmpAct2 = SQRT((Vect1.X*Vect1.X)+(Vect1.Y*Vect1.Y))
+			
+			IF (Vec1.Y < 0) THEN 
+			Weav_Amp_Act = Weav_Amp_Act *(-1) 
+			
+			ENDIF
+			
+		else  -- downhand
+			Weav_AmpAct2 = SQRT((Vect1.X*Vect1.X)+(Vect1.Z*Vect1.Z))
+			IF (Vec1.Z < 0) THEN 
+			Weav_Amp_Act = Weav_Amp_Act *(-1) 
+			
+			ENDIF
+			
+		ENDIF
+		
+
+-- Getting OTF speeds
+	GET_VAR(TempINT,'*SYSTEM*','$MCR_GRP[1].$OTF_ORG_SPD', OTF_Ospeed,Stat)
+	GET_VAR(TempINT,'*SYSTEM*','$MCR_GRP[1].$OTF_SPEED', OTF_speed,Stat)
+
+			--ID, weave_amp, volt, amp, weave_amp2, OTF_0, OTF
+			--old line --WRITE filnavn (LoopCnt::6,Weav_Amp_Act::6::2,Arct_Val::6::2, Amp_Val::6::2 ,Dif_Arct::6::2,Weav_AmpAct2::6::2, 
+			--log input group 1 and 5
+			WRITE filnavn (LoopCnt::6,';',Weav_Amp_Act::6::2,';',Arct_Val::6::2,';',Amp_Val::6::2,';',Dif_Arct::6::2 ,';',Weav_AmpAct2::6::2,';', 
+				OTF_Ospeed::6::2,';', OTF_speed::6::2,';', Avg_Dif_Arct::6::2,';',Dif_Arct::6::2,';', End_Found, CR)
+		
+	ENDIF
+	
+-- writes in end of file
+	 	IF (LoopCnt > 200) AND ((DIN[ArcDetPort]= OFF)) THEN
+	 	
+			LoopCnt = 0
+	  		
+	  		CLOSE FILE filnavn
+	  	
+			file_Done = FALSE
+			
+		ENDIF
+	
+END CurLog
+
+------------------------------------
+
+--------------------------------------------------------------------------------------------- 
+-- main program
+--------------------------------------------------------------------------------------------- 
+BEGIN
+	
+	-- gets port numbers for arc detect, Volt in, amp in, volt out, amp out
+
+
+	GET_VAR(TempINT,'*SYSTEM*','$AWEPRR[1].$VOLTAGE_CMD.$PORT_NUM',SetVoltPort,Stat)
+	GET_VAR(TempINT,'*SYSTEM*','$AWEPRR[1].$CURRENT_CMD.$PORT_NUM',SetAmpPort ,Stat)
+		
+	GET_VAR(TempINT,'*SYSTEM*','$AWEPRR[1].$ARC_DETECT.$PORT_NUM',ArcDetPort,Stat)
+	GET_VAR(TempINT,'*SYSTEM*','$AWEPRR[1].$VOLTAGE_FBK.$PORT_NUM',FbkVoltPort,Stat)
+	GET_VAR(TempINT,'*SYSTEM*','$AWEPRR[1].$CURRENT_FBK.$PORT_NUM',FbkAmpPort,Stat)
+
+	GET_VAR(TempINT,'*SYSTEM*','$AWEPRR[1].$VOLTAGE_FBK.$PORT_NUM',Fbk_Amp_P,Stat)
+	GET_VAR(TempINT,'*SYSTEM*','$AWEPRR[1].$FBK4.$PORT_NUM',Fbk_Arct_P,Stat)
+
+
+	IF UNINIT(WeldNr) THEN
+		WeldNr = 1
+	ENDIF	
+	
+	IF WeldNr = 999 THEN
+		WeldNr = 1
+	ENDIF
+	
+-- init end val
+End_Max  = 30    		--  Number of steps in a cycle
+End_Cnt = 0		        	-- Counter for END loop
+Cyc_Cnt	 = 0                      -- Counter for number of cycle
+Cyc_Max = 5                      --  Number of cycle to save
+End_Full	= FALSE 	 	--  First cycle is finished
+Cyc_Full	= FALSE 	 	--  First Cyc_Max is finished
+End_Found = FALSE		--  End found
+Sum_Arct = 0   	 		--  Sum of GIN[FbkArctPort]
+Max_Arct = 0			--  Max value of GIN[FbkArctPort]
+Min_Arct = 0   			--  Max value of GIN[FbkArctPort]
+Dif_Arct = 0 				--  Max - min of GIN[FbkArctPort]
+Arct_Val = 0  			--  Value of GIN[FbkArctPort]
+Amp_Val = 0 			--  Value of GIN[FbkArctPort]
+Avg_Dif_Arct = 0               --  Avg of Max - min of GIN[FbkArctPort] for last Cyc_Max cycle
+Det_Coe = 2  			--  Detect coefficient	
+Coe = 0                              -- coefficient between Dif_Arct /  Avg_Dif_Arct
+
+--- Diff in Max - min for Arct value is saved for each cycle. One cycle is End_Max step
+-- The average over the last Cyc_Max is calculated. This average is compared with the current Diff in max - min Arct.
+-- If the current Arct diff is bigger than (Det_Coe x average value) there must be a hole or an end
+
+		
+-- init file attrib
+	CNV_INT_STR(WeldNr,1,0,NumStr)
+	i = STR_LEN(NumStr)
+	NumStr = SUB_STR(NumStr,2,i-1)
+	
+	FileStr = 'fr:\mig' + NumStr + '.TXT'
+
+-- getting weaving freq + amplitude set values
+	GET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$OTF_WVSCH.$AMPLITUDE', WV_Amp_Act,Stat)
+	GET_VAR(TempINT,'*SYSTEM*','$WV_OTF_GP[1].$OTF_WVSCH.$FREQUENCY', WV_Frq_Act,Stat)
+	
+-- fljo added
+	SensArr[1] = $SCR_GRP[1].$MCH_ANG[1]
+	SensArr[2] = $SCR_GRP[1].$MCH_ANG[2]
+	SensArr[3] = $SCR_GRP[1].$MCH_ANG[3]
+	SensArr[4] = $SCR_GRP[1].$MCH_ANG[4]
+	SensArr[5] = $SCR_GRP[1].$MCH_ANG[5]
+	SensArr[6] = $SCR_GRP[1].$MCH_ANG[6]
+	SensArr[7] = 0
+	SensArr[8] = 0
+	SensArr[9] = 0
+	CNV_REL_JPOS(SensArr, JPos_Test, Stat) 	
+	CalcPos = JPos_Test
+	Vect1.x = CalcPos.x
+	Vect1.y = CalcPos.y
+	Vect1.z = CalcPos.z
+
+
+	GET_TIME(TimeInt)
+	CNV_TIME_STR(TimeInt,TimeStr)
+
+	
+-- write titles in file head
+statusf = 0
+	OPEN FILE filNavn ('rw', filestr)
+		 
+		 
+		 WRITE filnavn(TimeStr,CR,CR) 
+				
+		-- now writes weav settings in one line		 
+		 WRITE filnavn('Weav-Ampl= ',WV_Amp_Act::6::2, '  Weav-Freq= ',WV_Frq_Act::6::2, '  Pos= ', Vect1,CR)  
+		
+				 		 
+	CLOSE FILE filnavn
+	
+--checks if file was created. Stops robot if file does not exist
+
+	OPEN FILE filNavn ('ro', filestr)
+		
+		 statusf = IO_STATUS(filnavn)		
+		 IF statusf <> 0 THEN
+		 	GOTO error1
+		 ENDIF
+		 
+	CLOSE FILE filnavn
+	
+-- counts up weldnr if file was created
+	WeldNr = WeldNr + 1
+	
+	LoopCnt = 0
+	
+	File_Done = TRUE
+	
+	WHILE file_Done = TRUE DO 
+		DELAY 16
+		CurLog
+	ENDWHILE  		
+
+
+DELAY 200
+GOTO last
+
+error1::
+-- stops robot if file error and displays error
+DOUT[86]=FALSE
+DELAY 200
+DOUT[86]=TRUE
+WRITE TPERROR (CR,'                                                                                             ',CR)
+WRITE  TPERROR('Cannot write to file')
+
+ABORT
+
+error2::
+-- stops robot if file error and displays error
+DOUT[86]=FALSE
+DELAY 200
+DOUT[86]=TRUE
+WRITE TPERROR (CR,'                                                                                             ',CR)
+WRITE  TPERROR('Welding machine setup problem')
+
+ABORT
+
+Last::
+   
+END CurChk
+

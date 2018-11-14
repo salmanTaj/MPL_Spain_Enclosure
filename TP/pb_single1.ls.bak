@@ -1,0 +1,61 @@
+/PROG  PB_SINGLE1
+/ATTR
+OWNER		= MNEDITOR;
+COMMENT		= "";
+PROG_SIZE	= 755;
+CREATE		= DATE 17-06-09  TIME 15:00:26;
+MODIFIED	= DATE 17-07-01  TIME 14:41:12;
+FILE_NAME	= START1;
+VERSION		= 0;
+LINE_COUNT	= 29;
+MEMORY_SIZE	= 1151;
+PROTECT		= READ_WRITE;
+TCD:  STACK_SIZE	= 0,
+      TASK_PRIORITY	= 50,
+      TIME_SLICE	= 0,
+      BUSY_LAMP_OFF	= 0,
+      ABORT_REQUEST	= 0,
+      PAUSE_REQUEST	= 0;
+DEFAULT_GROUP	= 1,*,*,*,*;
+CONTROL_CODE	= 00000000 00000000;
+/APPL
+  ARC : TRUE ; 
+  ARC Welding Equipment : 1,*,*,*,*;
+
+MPAS ;
+MPAS_NUM_PASSES        : 0;
+MPAS_LAST_PASS         : 0;
+MPAS_CURRENT_PASS      : 0;
+MPAS_STATUS_PASS       : 0;
+/MN
+   1:  !-- AT RESUME JMP TO LABEL ;
+   2:  IF ((R[151]>0)),JMP LBL[R[151]] ;
+   3:   ;
+   4:  LBL[11] ;
+   5:  R[151]=11    ;
+   6:   ;
+   7:  Weave Sine[1] ;
+   8:  ! Track TAST[R[21]] ;
+   9:   ;
+  10:  CALL PRG_CALC1    ;
+  11:  PR[11,4]=PR[21,4]    ;
+  12:  PR[11,5]=PR[21,5]    ;
+  13:  PR[11,6]=PR[21,6]    ;
+  14:L PR[11] R[126]cm/min CNT100    ;
+  15:  R[75]=R[75]+1    ;
+  16:   ;
+  17:  LBL[12] ;
+  18:  R[151]=12    ;
+  19:  SKIP CONDITION R[75]=4    ;
+  20:   ;
+  21:  PR[12,4]=PR[21,4]    ;
+  22:  PR[12,5]=PR[21,5]    ;
+  23:  PR[12,6]=PR[21,6]    ;
+  24:L PR[12] R[126]cm/min FINE Skip,LBL[1]    ;
+  25:   ;
+  26:  LBL[1] ;
+  27:  Weave End ;
+  28:   ;
+  29:  R[151]=0    ;
+/POS
+/END

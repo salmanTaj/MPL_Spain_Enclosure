@@ -1,0 +1,71 @@
+/PROG  SAFEOUT3
+/ATTR
+OWNER		= MNEDITOR;
+COMMENT		= "";
+PROG_SIZE	= 1047;
+CREATE		= DATE 11-03-29  TIME 17:11:38;
+MODIFIED	= DATE 17-07-03  TIME 15:17:42;
+FILE_NAME	= SAFEIN;
+VERSION		= 0;
+LINE_COUNT	= 45;
+MEMORY_SIZE	= 1507;
+PROTECT		= READ_WRITE;
+TCD:  STACK_SIZE	= 0,
+      TASK_PRIORITY	= 50,
+      TIME_SLICE	= 0,
+      BUSY_LAMP_OFF	= 0,
+      ABORT_REQUEST	= 0,
+      PAUSE_REQUEST	= 0;
+DEFAULT_GROUP	= *,*,1,*,*;
+CONTROL_CODE	= 00000000 00000000;
+/APPL
+  ARC : TRUE ; 
+  ARC Welding Equipment : *,1,*,*,*;
+/MN
+   1:  ! Safeout for Robot1 ;
+   2:  TIMER[3]=RESET ;
+   3:  TIMER[3]=START ;
+   4:  UFRAME_NUM=1 ;
+   5:  UTOOL_NUM=1 ;
+   6:  Weave End ;
+   7:  ! Track End ;
+   8:  ! jmp if program should not be ru ;
+   9:  IF ((R[155]=3) OR (R[155]=4)),JMP LBL[999] ;
+  10:  ! jmp if program is restarted ;
+  11:  !-- AT RESUME JMP TO LABEL ;
+  12:  IF R[154]>0,JMP LBL[R[154]] ;
+  13:  ! STore welding point ;
+  14:  IF R[164]=0,JMP LBL[2] ;
+  15:  PR[150]=LPOS    ;
+  16:  !Move gun out ;
+  17:  UFRAME_NUM=9 ;
+  18:  UTOOL_NUM=1 ;
+  19:  PR[120]=LPOS    ;
+  20:   ;
+  21:  UFRAME[6]=PR[120] ;
+  22:   ;
+  23:  UFRAME_NUM=6 ;
+  24:  PR[120]=LPOS    ;
+  25:  PR[121]=PR[120]    ;
+  26:  PR[121,3]=PR[121,3]+150    ;
+  27:  LBL[1] ;
+  28:  R[154]=1    ;
+  29:L PR[121] 200mm/sec FINE    ;
+  30:  ! Store 2. point ;
+  31:  UFRAME_NUM=1 ;
+  32:  UTOOL_NUM=1 ;
+  33:  PR[151]=LPOS    ;
+  34:  LBL[2] ;
+  35:  R[154]=2    ;
+  36:  CALL FOLD3    ;
+  37:  R[155]=R[155]+3    ;
+  38:  LBL[999] ;
+  39:  R[154]=999    ;
+  40:  !delay ;
+  41:  IF (TIMER[3]<.5) THEN ;
+  42:  WAIT    .50(sec) ;
+  43:  ENDIF ;
+  44:  TIMER[3]=STOP ;
+  45:  R[154]=0    ;
+/POS
+/END

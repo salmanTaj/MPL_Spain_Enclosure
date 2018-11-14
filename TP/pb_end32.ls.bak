@@ -1,0 +1,84 @@
+/PROG  PB_END32
+/ATTR
+OWNER		= MNEDITOR;
+COMMENT		= "";
+PROG_SIZE	= 1213;
+CREATE		= DATE 17-06-07  TIME 12:00:00;
+MODIFIED	= DATE 18-03-09  TIME 10:16:16;
+FILE_NAME	= PB_END1;
+VERSION		= 0;
+LINE_COUNT	= 52;
+MEMORY_SIZE	= 1637;
+PROTECT		= READ_WRITE;
+TCD:  STACK_SIZE	= 0,
+      TASK_PRIORITY	= 50,
+      TIME_SLICE	= 0,
+      BUSY_LAMP_OFF	= 0,
+      ABORT_REQUEST	= 0,
+      PAUSE_REQUEST	= 0;
+DEFAULT_GROUP	= *,1,1,*,*;
+CONTROL_CODE	= 00000000 00000000;
+/APPL
+  ARC : TRUE ; 
+  ARC Welding Equipment : *,1,*,*,*;
+
+MPAS ;
+MPAS_NUM_PASSES        : 0;
+MPAS_LAST_PASS         : 0;
+MPAS_CURRENT_PASS      : 0;
+MPAS_STATUS_PASS       : 0;
+/MN
+   1:  JMP LBL[555] ;
+   2:  R[153]=0    ;
+   3:  LBL[555] ;
+   4:  !************************** ;
+   5:  !** WELD end back with gantry ;
+   6:  !************************** ;
+   7:   ;
+   8:  !skip end of T-bar slopes ;
+   9:  IF ((R[289]=1) AND (R[95]=1)) THEN ;
+  10:  WAIT   2.00(sec) ;
+  11:  JMP LBL[999] ;
+  12:  ENDIF ;
+  13:   ;
+  14:  !-- AT RESUME JMP TO LABEL ;
+  15:  IF ((R[153]>200)),JMP LBL[R[153]] ;
+  16:   ;
+  17:  UFRAME_NUM=1 ;
+  18:  UTOOL_NUM=1 ;
+  19:   ;
+  20:  LBL[201] ;
+  21:  R[153]=201    ;
+  22:  !Store gantry point ;
+  23:  PR[18]=LPOS    ;
+  24:  PR[GP2:15,1]=PR[GP2:18,1]    ;
+  25:   ;
+  26:  ! Calc Points ;
+  27:  R[137]=PR[GP3:15,1]    ;
+  28:  IF (R[137]>140) THEN ;
+  29:  PR[GP3:15,1]=120    ;
+  30:  PR[GP2:15,1]=(PR[GP2:15,1]+(R[137]-120)) ;
+  31:  ENDIF ;
+  32:   ;
+  33:   ;
+  34:   ;
+  35:  ! Weld using gantry ;
+  36:  LBL[202] ;
+  37:  R[153]=202    ;
+  38:  Weave Sine[3] ;
+  39:  Track TAST[R[23]] ;
+  40:  Weld Start E2[1,R[112],E0] ;
+  41:   ;
+  42:L PR[15] R[127]cm/min FINE COORD    ;
+  43:  Weave End[1] ;
+  44:  Track End ;
+  45:  Weld End E2[1,R[112]] ;
+  46:   ;
+  47:  LBL[999] ;
+  48:   ;
+  49:  R[153]=0    ;
+  50:   ;
+  51:  LBL[1000] ;
+  52:   ;
+/POS
+/END

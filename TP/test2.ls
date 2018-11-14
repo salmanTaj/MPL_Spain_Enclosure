@@ -1,0 +1,45 @@
+/PROG  TEST2
+/ATTR
+OWNER		= MNEDITOR;
+COMMENT		= "";
+PROG_SIZE	= 595;
+CREATE		= DATE 17-05-18  TIME 12:48:50;
+MODIFIED	= DATE 17-06-08  TIME 15:08:26;
+FILE_NAME	= ;
+VERSION		= 0;
+LINE_COUNT	= 3;
+MEMORY_SIZE	= 955;
+PROTECT		= READ_WRITE;
+TCD:  STACK_SIZE	= 0,
+      TASK_PRIORITY	= 50,
+      TIME_SLICE	= 0,
+      BUSY_LAMP_OFF	= 0,
+      ABORT_REQUEST	= 0,
+      PAUSE_REQUEST	= 0;
+DEFAULT_GROUP	= *,1,*,*,*;
+CONTROL_CODE	= 00000000 00000000;
+/APPL
+  ARC : TRUE ; 
+  ARC Welding Equipment : 1,*,*,*,*;
+
+MPAS ;
+MPAS_NUM_PASSES        : 0;
+MPAS_LAST_PASS         : 0;
+MPAS_CURRENT_PASS      : 0;
+MPAS_STATUS_PASS       : 0;
+/MN
+   1:  OVERRIDE=100% ;
+   2:L P[1] 300mm/sec FINE    ;
+   3:L P[2] 300mm/sec FINE    ;
+/POS
+P[1]{
+   GP2:
+	UF : 1, UT : 1,	
+	J1=  4013.387  mm
+};
+P[2]{
+   GP2:
+	UF : 1, UT : 1,	
+	J1=  5500.000  mm
+};
+/END

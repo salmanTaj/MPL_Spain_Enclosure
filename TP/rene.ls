@@ -1,0 +1,41 @@
+/PROG  RENE
+/ATTR
+OWNER		= MNEDITOR;
+COMMENT		= "";
+PROG_SIZE	= 359;
+CREATE		= DATE 17-06-27  TIME 01:43:12;
+MODIFIED	= DATE 17-06-28  TIME 23:13:26;
+FILE_NAME	= ;
+VERSION		= 0;
+LINE_COUNT	= 9;
+MEMORY_SIZE	= 695;
+PROTECT		= READ_WRITE;
+TCD:  STACK_SIZE	= 0,
+      TASK_PRIORITY	= 50,
+      TIME_SLICE	= 0,
+      BUSY_LAMP_OFF	= 0,
+      ABORT_REQUEST	= 0,
+      PAUSE_REQUEST	= 0;
+DEFAULT_GROUP	= 1,1,1,*,*;
+CONTROL_CODE	= 00000000 00000000;
+/APPL
+  ARC : TRUE ; 
+  ARC Welding Equipment : 1,*,*,*,*;
+
+MPAS ;
+MPAS_NUM_PASSES        : 0;
+MPAS_LAST_PASS         : 0;
+MPAS_CURRENT_PASS      : 0;
+MPAS_STATUS_PASS       : 0;
+/MN
+   1:  PR[1]=LPOS    ;
+   2:J PR[2] 100% FINE    ;
+   3:   ;
+   4:  WAIT   5.00(sec) ;
+   5:   ;
+   6:J PR[10] 100% FINE    ;
+   7:   ;
+   8:   ;
+   9:   ;
+/POS
+/END

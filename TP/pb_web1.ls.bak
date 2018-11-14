@@ -1,0 +1,203 @@
+/PROG  PB_WEB1
+/ATTR
+OWNER		= MNEDITOR;
+COMMENT		= "";
+PROG_SIZE	= 2603;
+CREATE		= DATE 10-08-05  TIME 14:56:58;
+MODIFIED	= DATE 18-01-30  TIME 20:47:40;
+FILE_NAME	= ;
+VERSION		= 0;
+LINE_COUNT	= 125;
+MEMORY_SIZE	= 3023;
+PROTECT		= READ_WRITE;
+TCD:  STACK_SIZE	= 0,
+      TASK_PRIORITY	= 50,
+      TIME_SLICE	= 0,
+      BUSY_LAMP_OFF	= 0,
+      ABORT_REQUEST	= 0,
+      PAUSE_REQUEST	= 0;
+DEFAULT_GROUP	= 1,*,*,*,*;
+CONTROL_CODE	= 00000000 00000000;
+/APPL
+  ARC : TRUE ; 
+  ARC Welding Equipment : 1,*,*,*,*;
+
+MPAS ;
+MPAS_NUM_PASSES        : 0;
+MPAS_LAST_PASS         : 0;
+MPAS_CURRENT_PASS      : 0;
+MPAS_STATUS_PASS       : 0;
+/MN
+   1:  JMP LBL[555] ;
+   2:  R[151]=0    ;
+   3:  LBL[555] ;
+   4:  !************************** ;
+   5:  !** WELD V/U Robot1 ;
+   6:  !************************** ;
+   7:   ;
+   8:  UFRAME_NUM=2 ;
+   9:  UTOOL_NUM=1 ;
+  10:  Weave End ;
+  11:  Track End ;
+  12:   ;
+  13:   ;
+  14:  !-- ARC PARAM -- ;
+  15:  WAIT R[109]=0    ;
+  16:  R[13]=6    ;
+  17:  R[115]=1    ;
+  18:  R[116]=1    ;
+  19:  CALL WELD_PA    ;
+  20:   ;
+  21:  !-- AT RESUME JMP TO LABEL ;
+  22:  IF ((R[151]>100)),JMP LBL[R[151]] ;
+  23:   ;
+  25:   ;
+    32:  !**************************** ;
+  33:  !**** POSITION CALC & POINTS ;
+  34:  !**************************** ;
+  :;
+    36:  !* FUT 000 OR FUT 00-1 (PR[43-44) ;
+  37:   ;
+  38:  !***  POSITION CALC START ;
+  39:  R[102]=(60+(R[95]*10)) ;
+  40:   ;
+  41:  !***  CONFIG CALC ;
+  42:  R[103]=43    ;
+  43:  IF (R[95]=(1)),R[103]=(45) ;
+  44:   ;
+  45:  CALL PRG_CALC1    ;
+  :;
+    65:  !Start Angle up point ;
+   66:  !-- WELDING  POINT 5 ;
+  50:  R[141]=0    ;
+  :!Depending on Profile type;
+    51:  R[135]=20   ;
+  :if (R[252]=2), R[135]=110;
+        :R[142]=R[135];
+  :;
+  52:  CALL PRG_CALC1    ;
+  53:  R[101]=R[102]+11    ;
+  55:  PR[5]=PR[R[101]]    ;
+  56:  PR[5,1]=PR[5,1]+R[141]    ;
+  57:  PR[5,2]=PR[5,2]+R[142]    ;
+  59:  !7 axis ;
+  60:  IF (R[258]=1 AND R[81]=2) THEN ;
+  61:  PR[5,7]=(PR[5,7]+200*R[83]*R[179]) ;
+  62:  ENDIF ;
+  :;
+    74:  !End Angle up point ;
+  75:  !-- WELDING  POINT 6 ;
+  50:  R[141]=0    ;
+
+    51:  R[135]=R[135]+100   ;
+      :R[142]=R[135];
+  :;
+  52:  CALL PRG_CALC1    ;
+  53:  R[101]=R[102]+11    ;
+    81:  PR[6]=PR[26]+PR[R[101]]    ;
+  56:  PR[6,1]=PR[6,1]+R[141]    ;
+  57:  PR[6,2]=PR[6,2]+R[142]    ;
+:PR[6,7]=PR[6,7];
+  
+  63:   ;
+  64:  !--  WELDING  POINT 16 ;
+  65:  R[141]=0    ;
+  66:  R[142]=0    ;
+  67:  CALL PRG_CALC1    ;
+  68:  R[101]=R[102]+10    ;
+  69:  PR[16]=PR[25]+PR[R[101]]    ;
+  70:  PR[16,1]=PR[16,1]+R[141]    ;
+  71:  PR[16,2]=PR[16,2]+R[142]    ;
+  72:  PR[16,3]=PR[16,3]    ;
+  73:  PR[16,4]=PR[26,4]    ;
+  74:  PR[16,5]=PR[26,5]    ;
+  75:  PR[16,6]=PR[26,6]    ;
+  76:   ;
+  77:  !resetting angles ;
+  78:  R[181]=0    ;
+  79:  R[182]=0    ;
+  80:  R[183]=0    ;
+  81:  CALL PRG_CALC1    ;
+  82:  R[258]=R[180]    ;
+  
+  94:  !**************************** ;
+  95:  ! Call sub programs for Starting ;
+  96:  !**************************** ;
+  :;
+  27:  IF (R[257]=1 OR R[257]=5) THEN ;
+  28:  CALL PB_WEMID1    ;
+  29:  ENDIF ;
+  30:   ;
+  31:  IF (R[257]=2 OR R[257]=4) THEN ;
+  32:  CALL PB_WEEDGE1    ;
+  33:  ENDIF ;
+  34:   ;
+ 123:  !**************************** ;
+ 124:  ! ***** WELDING ***** ;
+ 125:  ! ***** Sub points ***** ;
+ 126:  !**************************** ;
+  37:   ;
+
+  89:   ;
+  90:  LBL[205] ;
+  91:  R[151]=205    ;
+   132:  !using current angles ;
+ 133:  PR[120]=LPOS    ;
+ 134:  PR[5,4]=PR[120,4]    ;
+ 135:  PR[5,5]=PR[120,5]    ;
+ 136:  PR[5,6]=PR[120,6]    ;
+  94:   ;
+  95:  Weave Sine[1] ;
+  96:  Track TAST[R[21]] ;
+  97:  Weld Start E1[1,R[111],E0] ;
+  98:  R[134]=R[126]*.85    ;
+  99:   ;
+ 100:L PR[5] R[134]cm/min CNT100    ;
+ 101:   ;
+ 102:   ;
+   90:  LBL[206] ;
+  91:  R[151]=206    ;
+  92:  !skip PR6 if short end ;
+  93:  IF R[97]=1,JMP LBL[216] ;
+  94:   ;
+  95:  Weave Sine[1] ;
+  96:  Track TAST[R[21]] ;
+  97:  Weld START E1[1,R[111],E0] ;
+  99:   ;
+ 100:L PR[6] R[134]cm/min CNT100    ;
+ 
+ 103:  LBL[216] ;
+ 104:  R[151]=216    ;
+ 105:  UFRAME_NUM=1 ;
+ 106:  Weave Sine[1] ;
+ 107:  Track TAST[R[21]] ;
+ 108:  Weld Start E1[1,R[111],E0] ;
+ 109:   ;
+ 110:L PR[16] R[126]cm/min FINE    ;
+ 111:  Weave End[1] ;
+ 112:  Track End ;
+ 113:  Weld End E1[1,R[111]] ;
+ 114:   ;
+ 
+ 115:  UFRAME_NUM=2 ;
+ :!returning point;
+  18:  !Unfold point ;
+  19:  PR[120]=JPOS    ;
+  20:  PR[120,1]=(-90)    ;
+  21:  PR[120,2]=(-55)    ;
+  22:  PR[120,3]=20    ;
+  23:  PR[120,4]=0    ;
+  24:  PR[120,5]=50   ;
+  25:  PR[120,6]=0    ;
+  :;
+   103:  LBL[217] ;
+ 104:  R[151]=217    ;
+ 119:L PR[120] 150mm/sec FINE    ;
+
+ 121:   ;
+ 122:  LBL[999] ;
+ 123:  R[151]=0    ;
+ 124:   ;
+ 125:  LBL[1000] ;
+/POS
+/END

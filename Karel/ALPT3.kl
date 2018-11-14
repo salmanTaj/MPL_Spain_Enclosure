@@ -1,0 +1,312 @@
+
+-- -- -- -- --     ALPT3     -- -- -- -- --
+-----------------------------------------------------------------------------------------
+PROGRAM ALPT3
+	%NOPAUSESHFT
+	%NOPAUSE = ERROR + TPENABLE
+	%NOABORT = ERROR 
+	%NOLOCKGROUP
+
+TYPE
+	%INCLUDE Types
+
+VAR
+	%INCLUDE Gvars
+	%INCLUDE MPL_vars
+		
+	Dag, maaned  :INTEGER
+  filnavn1			FROM TASKMAN:STRING[18]
+  i : INTEGER
+  Real_tmp	:REAL
+
+
+--- Routines from Funklib
+ROUTINE Set_DOUT (OutNr   :INTEGER; Value : BOOLEAN): BOOLEAN FROM FunktLib
+ROUTINE Get_DIN (OutNr   :INTEGER): BOOLEAN FROM FunktLib
+ROUTINE Get_IReg (Number : INTEGER) :INTEGER FROM FunktLib
+ROUTINE Get_RReg (Number : INTEGER) :REAL FROM FunktLib
+ROUTINE Set_IReg (Number : INTEGER; Value : INTEGER) FROM FunktLib
+ROUTINE Set_RReg (Number : INTEGER; Value : REAL) FROM FunktLib
+ROUTINE Hvis (ValocalR : REAL; Compare : STRING; Var2 : REAL ; Stp_True : INTEGER; Stp_False : INTEGER) :INTEGER FROM Funktlib
+--
+ROUTINE Def_Cart_MP (RegNr: INTEGER; X :REAL;Y:REAL;Z:REAL;w:REAL;p:REAL;r:REAL;Ex1:REAL)FROM FunktLib
+ROUTINE Def_Jnt_MP (RegNr: INTEGER; J1:REAL; J2:REAL; J3:REAL; J4:REAL; J5:REAL; J6:REAL; J7:REAL; J8:REAL; J9:REAL)FROM FunktLib
+ROUTINE Def_SP (OutNr   : INTEGER; X :REAL;Y:REAL;Z:REAL) FROM FunktLib	-- sensepunkt der lægges ud i registre
+ROUTINE Act_Pos(MPNr   : INTEGER;rob : INTEGER) FROM FunktLib	-- put aktuelle position i MP [nummer]
+
+--
+ROUTINE Searching(DirNum:INTEGER; SearchLen:INTEGER; Retract:INTEGER;SearcSign: BOOLEAN;Err_Cond:INTEGER):REAL FROM FunktLib
+ROUTINE Ch_Conf_Mov(PosExt1:XYZWPREXT;PosExt2:XYZWPREXT;ForceCh:INTEGER;SearchVal:BOOLEAN):XYZWPREXT FROM FunktLib
+ROUTINE Mot_Sens(PosDest:XYZWPREXT;SearchType : STRING; Flange: BOOLEAN ):Pos_Chk FROM FunktLib
+
+ROUTINE Motion(PosDest:XYZWPREXT;ForceCh:INTEGER)  FROM FunktLib
+ROUTINE Chk_Dest(PosDest:XYZWPREXT;ForceCh:INTEGER):Pos_Chk FROM FunktLib
+ROUTINE Dir_func FROM  Funktlib
+
+ROUTINE CloseDoor FROM  Funktlib -- closes laserdoor and check laser dist
+--
+----- Routines from GeoLib
+ROUTINE Feat_Tbl (FeatNr :INTEGER) FROM GeoLib -- Feature information and steps
+ROUTINE ProfileH (H_meas: REAL) : INTEGER FROM GeoLib -- Profile Heigth
+ROUTINE ProThick : REAL FROM GeoLib -- Min. plate thickness
+--
+ROUTINE Geo_Scal : REAL FROM GeoLib -- Scallop size
+ROUTINE Geo_CutRad  : REAL FROM GeoLib -- Radios
+ROUTINE Geo_NWTH  : REAL FROM GeoLib -- NWTCP Heigth
+ROUTINE Geo_NWTW  : REAL FROM GeoLib -- NWTCP Width
+ROUTINE Geo_NWTRad  : REAL FROM GeoLib -- NWTCP Radius
+--
+ROUTINE Geo_WTH  : REAL FROM GeoLib -- WTCP Heigth
+ROUTINE Geo_WTW  : REAL FROM GeoLib -- WTCP Width
+ROUTINE Geo_WTRad  : REAL FROM GeoLib -- WTCP Radius
+--
+ROUTINE Geo_ELCPH : REAL FROM GeoLib -- ELCP Heigth
+ROUTINE Geo_ELCPR : REAL FROM GeoLib -- ELCP Rad
+
+--- Routines from Taskman
+ROUTINE Loop_AL FROM AnLa_ny
+ROUTINE Start_AL FROM AnLa_ny
+ROUTINE ReadLaser : REAL FROM AnLa_ny
+
+ROUTINE CheckLaw :INTEGER FROM TaskMan
+
+
+-- Routines from Inrotech
+ROUTINE StepMachine3 FROM ALPT3
+
+-- skal vi bruge dem?
+
+--ROUTINE WeldTbl (FeatNr :INTEGER) FROM Inrotech
+--ROUTINE GetVal FROM analaser    
+--ROUTINE ReadLaser(S_Type:INTEGER; S_Val:REAL) FROM analaser    
+--ROUTINE Anago FROM Anago
+
+
+--
+----------------------------------------------------------f---------------------------------
+---- StepMachine (-1/1)
+-------------------------------------------------------------------------------------------
+ROUTINE StepMachine3
+BEGIN
+
+	
+--################################################--
+	-- Step 55 Jump sensning
+--################################################--
+	step[55+SO].enbl=TRUE
+	
+	SC=55+SO
+	IF step[SC].enbl=TRUE THEN
+		Actstep=SC
+		ErrorNo = 501
+		
+		--Switching to UF1
+	--****************** Setting UF  2 = UF 1 **************************
+	
+		mp[1]=$MNUFRAME[1,1]
+		$MNUFRAME[1,2]=mp[1]
+		
+		mp[1]=$MNUFRAME[3,1]
+		$MNUFRAME[3,2]=mp[1]
+		$GROUP[1].$UFRAME = $MNUFRAME[1, 2] 
+		$GROUP[3].$UFRAME = $MNUFRAME[3, 2] 
+		
+		$GROUP[1].$UTOOL = $MNUTOOL[1, 3]
+		$GROUP[3].$UTOOL = $MNUTOOL[3, 3]
+			
+		
+		-- getting actual position
+		act_pos(1,robot)
+			
+		-- Getting ProE
+		IF robot = 1 THEN 
+			ProE=get_RReg(462) -- start pos R1
+		else 
+			ProE=Get_RReg(464) -- start pos R3
+		ENDIF
+		
+		IF XY_dir = 1 THEN 
+			act_pos(8,2) --gets gantry pos
+			ProE=ProE-mp[8].x
+		ENDIF
+	
+		-- Calculate ProS -- side of profile
+		ProS_tmp=ProS -- storing ProS
+		
+		
+		IF XY_dir = 1 THEN -- X direction
+			-- does not work if both robots are up
+			
+			--IF robot=1 THEN 
+				--act_pos(1,3)
+				--ProS=mp[1].y
+			--else
+				--act_pos(1,1)
+				--ProS=mp[1].y
+			--ENDIF
+			
+			real_tmp=(X_start-(ProE+mp[8].x))*TAN(Pang)-- no abs
+			ProS=Y_start+real_tmp
+		
+		else
+			--IF robot=1 THEN 
+				--act_pos(1,3)
+				--ProS=mp[1].x
+			--else
+				--act_pos(1,1)
+				--ProS=mp[1].x
+			--ENDIF
+			
+			-- Y-profiles
+			real_tmp=(Y_start-ProE)*TAN(Pang) -- no abs
+			act_pos(8,2) --gets gantry pos
+			ProS=X_start+real_tmp-mp[8].x
+			
+		ENDIF	
+		
+		E_offs= -20 -- to avoid sensing on other weld
+		S_offs= 5
+		r_angle=0 -- angle
+		p_angle = 40
+		
+		
+		-- set X and Y correct
+		
+		Dir_func	
+		
+		--7 axis position
+		-- ExtOffset2 = 150 -- set in ALPT1
+			
+		IF XY_dir = 1 THEN
+			IF robot = 1 THEN
+				Real_tmp=(ProY+Y_offs)-ExtOffset2
+			else
+				Real_tmp=(ProY+Y_offs)+ExtOffset2
+			ENDIF
+		else
+			Real_tmp=(ProY+Y_offs)-ExtOffset2*SE*Y_dir
+		ENDIF		
+		
+		Def_Cart_mp(1,ProX+X_offs,ProY+Y_offs,zbase+35,0,p_angle,r_angle,real_tmp) 
+		
+		--ProS=ProS_tmp -- setting back ProS
+				
+		Motion(mp[1],0)
+		
+		sensspeed = 25 		
+		
+		tool_dir=2
+		IF DIN[I_Slaser] = ON THEN 
+			step[SC].S=Searching(4,150,-12,FALSE,1)
+		else
+			step[SC].S=Searching(-4,150,12,TRUE,1)
+		ENDIF
+			
+		step[SC].z=Searching(-3,110,15,TRUE,1)+2
+		
+		--pull error if wrong sensing
+		IF ABS(zbase-step[SC].z)>30 THEN 
+			errorno=510
+			errorreq=TRUE
+		ENDIF
+		
+		S_dir=-2
+		dir_func
+		step[SC].S=Searching(S_dir,100,0,TRUE,1)
+		
+		
+		ProS=step[SC].S
+		ProZ = step[SC].z
+			
+		Zbase=ProZ
+		E_offs=0 -- var -5
+		S_offs= 0
+		
+		----- Defining Sensing point  and types -----	
+			dir_func
+			Def_SP(1,ProX+X_offs,ProY+Y_offs,ProZ)
+
+ENDIF
+	
+---*************************************************************
+
+
+
+END Stepmachine3
+
+
+-----------------------------------------------------------------------------------------
+-- Step2 begins
+----------------------------------------------------------------------------------------
+BEGIN
+---**************************************************************
+-- Call StepMachine First time
+---**************************************************************
+	$GROUP[1].$UFRAME = $MNUFRAME[1, 1] 
+	$GROUP[1].$UTOOL = $MNUTOOL[1, 3]
+	$GROUP[3].$UFRAME = $MNUFRAME[3, 1] 
+	$GROUP[3].$UTOOL = $MNUTOOL[3, 3]
+	Set_IReg(96,1) -- setting userframe for TP program
+	
+-- Active robot + sensor
+IF ((Get_IReg(157)=32)OR (Get_IReg(157)=131)) THEN -- if robot 1 is running the program. Looking at jump label
+	Robot=1
+	Set_IReg(151,0) -- reset jump label for R1
+	RD=1
+	side12=1
+	I_SLaser = I_SLaser1
+	O_SLaser = O_SLaser1
+	IA_SLaser = IA_SLaser1
+	
+	
+	-- Setting step range
+		
+		SO = 30+30*RD
+		
+	IF RDO[RO_LaserLit1] = FALSE THEN
+		RDO[RO_LaserLit1] = TRUE	-- Open laserhouse
+		DOUT[O_SLaser1] = TRUE	-- Power on laser
+		--DELAY 1000
+	ENDIF
+
+	stepMachine3
+	
+	-- Setting endtype
+	end_type=5
+	Set_Ireg(254,End_Type)
+	
+	closedoor
+ENDIF 
+
+---**************************************************************
+-- Call StepMachine Second time
+---**************************************************************
+-- Active robot
+IF ((Get_IReg(157)=42) or (Get_IReg(157)=133)) THEN -- if robot 3is running the program. looking at jump label
+	Robot=3
+	Set_IReg(153,0) -- reset jump label for R3
+	RD=-1
+	side12=2
+	I_SLaser = I_Slaser2
+	O_SLaser = O_SLaser2
+	IA_SLaser = IA_SLaser2
+	
+	-- Setting step range
+		SO = 30+30*RD
+	
+		IF RDO[RO_LaserLit2] = FALSE THEN
+			RDO[RO_LaserLit2] = TRUE	-- Open laserhouse
+			DOUT[O_SLaser2] = TRUE	-- Power on laser
+			--DELAY 1000
+		ENDIF
+	
+	stepMachine3
+	
+	-- Setting endtype
+	end_type=5
+	Set_Ireg(264,End_Type)	
+	
+	closedoor
+ENDIF
+
+END ALPT3

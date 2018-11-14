@@ -1,0 +1,108 @@
+PROGRAM Reg_Cmt
+%NOLOCKGROUP
+%COMMENT = 'R491=1234'
+
+VAR
+i_Cnt,Chk_Cnt,n,STATUS  FROM Reg_Cmt: INTEGER
+RealVal	              FROM Reg_Cmt: REAL
+IntVal                FROM Reg_Cmt: INTEGER
+BoolVal	              FROM Reg_Cmt: BOOLEAN
+
+FilStat,i,j,k,m         FROM Reg_Cmt: INTEGER
+txt_str	              FROM Reg_Cmt: STRING[20]
+Txt_Arr1              FROM Reg_Cmt: ARRAY[500] OF STRING[22] 
+
+txt_str3	            FROM Reg_Cmt: STRING[3]
+txt_str16	            FROM Reg_Cmt: STRING[16]
+FilNavn	              FROM Reg_Cmt: STRING[12]
+
+filn  :FILE
+
+
+BEGIN
+  
+
+
+  FOR IntVal = 1 TO 5 DO
+  	
+	  SELECT IntVal OF
+	    CASE (1):
+	      FilNavn = 'fr:\reg.csv'
+	       
+	    CASE (2):
+	      FilNavn = 'fr:\Preg.csv'
+	       
+	    CASE (3):
+	      FilNavn = 'fr:\DIN.csv'
+	       
+	    CASE (4):
+	      FilNavn = 'fr:\DOUT.csv'
+	       
+	    CASE (5):
+	      FilNavn = 'fr:\Flag.csv'
+	  ENDSELECT     
+	      
+	      
+	
+	  SET_FILE_ATR(filn,ATR_FIELD)
+	  OPEN FILE filn ('ro',FilNavn)
+	
+	  FilStat=IO_STATUS(filn)
+	  IF FilStat<>0 THEN
+	    POST_ERR(STATUS,'',0,0)
+	  	CLOSE FILE filn
+	    ABORT
+	  ENDIF  
+	
+	  FilStat=0
+	  i_Cnt=0
+	
+	  WHILE (FilStat=0) AND (i_Cnt<500) DO
+	    i_Cnt=i_Cnt+1
+	  	READ filn(txt_str)
+	    FilStat=IO_STATUS(filn)
+	  	Txt_Arr1[i_Cnt]=txt_str
+	  ENDWHILE
+	  
+	  CLOSE FILE filn
+	  
+		  FOR i = 1 TO i_Cnt DO
+		    j=1
+		    IF STR_LEN(Txt_Arr1[i])>2 THEN
+		      Chk_Cnt=STR_LEN(Txt_Arr1[i])
+		      WHILE SUB_STR(Txt_Arr1[i],j,1) <> ',' DO
+		        IF Chk_Cnt = j THEN 
+		          ABORT
+		        ENDIF  
+		        j = j + 1
+		      ENDWHILE  
+		  	
+		    	txt_str3=SUB_STR(Txt_Arr1[i],1,j-1)
+		--    	txt_str16=SUB_STR(Txt_Arr1[i],j+1,STR_LEN(Txt_Arr1[i])-(j+1))
+		      txt_str16=SUB_STR(Txt_Arr1[i],j+1,STR_LEN(Txt_Arr1[i])-(j+0))
+		      
+		      CNV_STR_INT(txt_str3,k)
+		
+		      SELECT IntVal OF
+		        CASE (1):
+		          SET_REG_CMT(k,txt_str16,STATUS)  -- REG
+		           
+		        CASE (2):
+		          SET_PREG_CMT(k,txt_str16,STATUS)  -- PREG
+		           
+		        CASE (3):
+		          SET_PORT_CMT(1,k,txt_str16,STATUS)  -- DIN
+		
+		        CASE (4):
+		          SET_PORT_CMT(2,k,txt_str16,STATUS)  -- DOUT
+		
+		        CASE (5):
+		          SET_PORT_CMT(35,k,txt_str16,STATUS)  -- Flag
+		      ENDSELECT
+		    ENDIF
+		    
+		    
+		  ENDFOR
+  ENDFOR  
+END Reg_Cmt
+

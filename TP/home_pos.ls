@@ -1,0 +1,43 @@
+/PROG  HOME_POS
+/ATTR
+OWNER		= MNEDITOR;
+COMMENT		= "";
+PROG_SIZE	= 387;
+CREATE		= DATE 17-05-24  TIME 11:37:14;
+MODIFIED	= DATE 18-05-03  TIME 08:21:56;
+FILE_NAME	= ;
+VERSION		= 0;
+LINE_COUNT	= 11;
+MEMORY_SIZE	= 747;
+PROTECT		= READ_WRITE;
+TCD:  STACK_SIZE	= 0,
+      TASK_PRIORITY	= 50,
+      TIME_SLICE	= 0,
+      BUSY_LAMP_OFF	= 0,
+      ABORT_REQUEST	= 0,
+      PAUSE_REQUEST	= 0;
+DEFAULT_GROUP	= *,*,*,*,*;
+CONTROL_CODE	= 00000000 00000000;
+/APPL
+  ARC : TRUE ; 
+  ARC Welding Equipment : *,*,*,*,*;
+
+MPAS ;
+MPAS_NUM_PASSES        : 0;
+MPAS_LAST_PASS         : 0;
+MPAS_CURRENT_PASS      : 0;
+MPAS_STATUS_PASS       : 0;
+/MN
+   1:  !Fold robots ;
+   2:  RUN FOLD1 ;
+   3:  CALL FOLD3    ;
+   4:   ;
+   5:  WAIT DO[101]=OFF    ;
+   6:  WAIT DO[103]=OFF    ;
+   7:   ;
+   8:  CALL FOLD2    ;
+   9:  IF (R[491]=789) THEN ;
+  10:  CALL SCAN_OHA    ;
+  11:  ENDIF ;
+/POS
+/END

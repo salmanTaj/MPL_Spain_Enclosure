@@ -1,0 +1,63 @@
+PROGRAM trigfunc
+
+VAR
+real_tmp, start_real, start_val, result ,atanx,atany   :REAL
+func_choice, start_int, stat1, stat2, Int_Tmp, i :INTEGER
+Bool_Tmp, start_bool    :BOOLEAN
+
+
+BEGIN
+		
+	
+	
+	GET_REG(111,start_bool,start_int,start_real,stat1)
+	IF start_bool = TRUE THEN 
+		start_val = start_real
+	else
+		start_val = start_int
+	ENDIF	
+	
+	GET_REG(114,start_bool,start_int, start_real,stat1)
+	IF start_bool = TRUE THEN 
+		atanx = start_real
+	else
+		atanx = start_int
+	ENDIF	
+	
+	GET_REG(115,start_bool,start_int,start_real,stat1)
+	IF start_bool = TRUE THEN 
+		atany = start_real
+	else
+		atany = start_int
+	ENDIF	
+	
+	GET_REG(112,Bool_Tmp,func_choice,real_tmp,stat1)
+	
+	
+	SELECT func_choice OF 
+		CASE (1):
+			result = SIN(start_val)
+		
+		CASE (-1):
+			result = ASIN(start_val)
+		
+		CASE (2):
+			result = COS(start_val)
+			
+		CASE (-2):
+			result = ACOS(start_val)
+		
+		CASE (3):
+			result = TAN(start_val)
+		
+		CASE (-3):
+			result = ATAN2(atanx,atany)
+		
+	ENDSELECT
+	
+	SET_REAL_REG(113,result,stat1)
+	
+
+
+END trigfunc
+
